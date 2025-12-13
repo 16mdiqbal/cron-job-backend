@@ -26,33 +26,63 @@ A production-ready Flask-based REST API for scheduling and managing cron jobs wi
 
 ```
 cron-job-backend/
-├── app.py                  # Main Flask application (Factory pattern)
-├── config.py               # Configuration settings
-├── create_admin.py         # Script to create initial admin user
-├── requirements.txt        # Python dependencies
-├── .env                    # Environment variables (git-ignored)
-├── .env.example           # Example environment variables
-├── models/
-│   ├── __init__.py        # Database initialization
-│   ├── user.py            # User model with authentication
-│   └── job.py             # Job model with ownership tracking
-├── routes/
-│   ├── __init__.py        # Routes package
-│   ├── auth.py            # Authentication endpoints (Blueprint)
-│   └── jobs.py            # Job API endpoints (Blueprint)
-├── utils/
-│   ├── __init__.py        # Utilities package
-│   ├── auth.py            # Auth decorators and helpers
-│   └── email.py           # Email notification utilities
-├── scheduler/
-│   ├── __init__.py        # Scheduler initialization
-│   └── job_executor.py    # Job execution functions
-├── instance/
+├── src/                    # Source code directory
+│   ├── __init__.py        # Package marker
+│   ├── __main__.py        # Module entry point (python -m src)
+│   ├── app.py             # Main Flask application (Factory pattern)
+│   ├── config.py          # Configuration settings
+│   ├── models/
+│   │   ├── __init__.py    # Database initialization
+│   │   ├── user.py        # User model with authentication
+│   │   ├── job.py         # Job model with ownership tracking
+│   │   └── job_execution.py # Job execution history model
+│   ├── routes/
+│   │   ├── __init__.py    # Routes package
+│   │   ├── auth.py        # Authentication endpoints (Blueprint)
+│   │   └── jobs.py        # Job API endpoints (Blueprint)
+│   ├── utils/
+│   │   ├── __init__.py    # Utilities package
+│   │   ├── auth.py        # Auth decorators and helpers
+│   │   └── email.py       # Email notification utilities
+│   └── scheduler/
+│       ├── __init__.py    # Scheduler initialization
+│       └── job_executor.py # Job execution functions
+├── test/                   # Test suite directory
+│   ├── conftest.py        # Pytest fixtures and configuration
+│   ├── test_auth/         # Authentication tests
+│   │   └── test_login.py
+│   ├── test_jobs/         # Job management tests
+│   │   ├── test_create.py
+│   │   ├── test_retrieve.py
+│   │   ├── test_update.py
+│   │   └── test_delete_and_execute.py
+│   └── test_notifications/ # Notification feature tests
+│       └── test_email_toggle.py
+├── instance/              # Flask instance folder (runtime data)
 │   └── cron_jobs.db       # SQLite database (auto-generated)
-├── architecture.md         # Architecture documentation
-├── TESTING.md             # Testing guide
+├── venv/                  # Python virtual environment
+├── create_admin.py        # Script to create initial admin user
+├── requirements.txt       # Python dependencies
+├── pytest.ini             # Pytest configuration
+├── .env                   # Environment variables (git-ignored)
+├── .env.example           # Example environment variables
+├── README.md              # This file
+├── FOLDER_STRUCTURE.md    # Detailed folder structure documentation
+├── TESTING_GUIDE.md       # Comprehensive testing guide
+├── REORGANIZATION_SUMMARY.md # Project reorganization details
+├── DATABASE_SCHEMA_MYSQL.sql # MySQL database schema
+├── MYSQL_SETUP_GUIDE.md   # MySQL setup and configuration
+├── MYSQL_CONFIG_REFERENCE.md # MySQL configuration examples
+├── MYSQL_DATABASE_SETUP.md   # MySQL database setup overview
+├── architecture.md        # Architecture documentation
 └── test_api.sh            # API testing script
 ```
+
+**Directory Organization:**
+- **src/** - All application source code
+- **test/** - Complete pytest test suite (94 tests)
+- **instance/** - Runtime data and databases
+- **venv/** - Python virtual environment
 
 ## Setup Instructions
 
@@ -109,9 +139,89 @@ python create_admin.py
 ### 5. Run the Application
 
 ```bash
-python app.py
+# Run as Python module (recommended)
+python -m src
 # Server will start on http://localhost:5001
+
+# Alternative: Run directly from src directory
+# python src/app.py
 ```
+
+---
+
+## Testing
+
+### Comprehensive Test Suite
+The project includes a full pytest test suite with 94 tests covering all functionality:
+
+```bash
+# Run all tests
+pytest test/ -v
+
+# Run specific test module
+pytest test/test_auth/ -v
+pytest test/test_jobs/ -v
+pytest test/test_notifications/ -v
+
+# Run with coverage report
+pytest test/ --cov=src --cov-report=html
+
+# Run specific test file
+pytest test/test_auth/test_login.py -v
+
+# Run tests matching pattern
+pytest test/ -k "test_create" -v
+```
+
+**Test Organization:**
+- `test/test_auth/` - Authentication and authorization (16 tests)
+- `test/test_jobs/` - Job CRUD operations (69 tests)
+- `test/test_notifications/` - Email notification features (21 tests)
+- `test/conftest.py` - Shared fixtures and configuration
+
+**Test Coverage:** 61% of source code
+
+**Test Duration:** ~3.3 seconds for full suite
+
+See [TESTING_GUIDE.md](TESTING_GUIDE.md) for detailed testing documentation.
+
+---
+
+## Database Configuration
+
+### SQLite (Development - Default)
+SQLite database is used by default and created automatically in `instance/cron_jobs.db`.
+
+### MySQL (Production)
+To use MySQL in production:
+
+1. **Install Dependencies:**
+   ```bash
+   pip install PyMySQL
+   # or
+   pip install mysql-connector-python
+   ```
+
+2. **Create Database:**
+   See [DATABASE_SCHEMA_MYSQL.sql](DATABASE_SCHEMA_MYSQL.sql) for complete schema.
+   ```bash
+   mysql -u root -p < DATABASE_SCHEMA_MYSQL.sql
+   ```
+
+3. **Configure Connection:**
+   ```bash
+   # Update .env file with your MySQL connection string
+   # Example for PyMySQL:
+   DATABASE_URL=mysql+pymysql://user:password@localhost:3306/cron_jobs_db
+   
+   # Example for mysql-connector-python:
+   DATABASE_URL=mysql+mysqlconnector://user:password@localhost:3306/cron_jobs_db
+   ```
+
+4. **Additional MySQL Resources:**
+   - [MYSQL_SETUP_GUIDE.md](MYSQL_SETUP_GUIDE.md) - Complete setup instructions
+   - [MYSQL_CONFIG_REFERENCE.md](MYSQL_CONFIG_REFERENCE.md) - Configuration examples
+   - [MYSQL_DATABASE_SETUP.md](MYSQL_DATABASE_SETUP.md) - Database overview
 
 ---
 
@@ -1547,57 +1657,7 @@ No action is required. This is an informational notification.
 
 ---
 
-## Testing
-
-### Automated Testing Script
-```bash
-chmod +x test_api.sh
-./test_api.sh
-```
-
-### Manual Testing Examples
-
-**Test Invalid Cron:**
-```bash
-curl -X POST http://localhost:5001/api/jobs \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Invalid Job",
-    "cron_expression": "invalid cron",
-    "target_url": "https://example.com"
-  }'
-# Expected: 400 Bad Request - "Invalid cron expression"
-```
-
-**Test Duplicate Name:**
-```bash
-# Create first job
-curl -X POST http://localhost:5001/api/jobs \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Test Job", "cron_expression": "*/5 * * * *", "target_url": "https://example.com"}'
-
-# Try to create duplicate
-curl -X POST http://localhost:5001/api/jobs \
-  -H "Content-Type: application/json" \
-  -d '{"name": "Test Job", "cron_expression": "*/10 * * * *", "target_url": "https://example.com"}'
-# Expected: 400 Bad Request - "Duplicate job name"
-```
-
-**Test Missing Target:**
-```bash
-curl -X POST http://localhost:5001/api/jobs \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "No Target Job",
-    "cron_expression": "*/5 * * * *"
-  }'
-# Expected: 400 Bad Request - "Missing target configuration"ash
-curl -X POST http://localhost:5000/api/jobs \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "Incomplete Job"
-  }'
-```
+---
 
 ## Cron Expression Examples
 
