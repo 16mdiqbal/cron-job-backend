@@ -939,9 +939,9 @@ rm instance/cron_jobs.db-journal
 
 ### Other Planned Features
 - [x] ~~Authentication & authorization~~ **COMPLETED**
-- [ ] Password reset functionality
-- [ ] User profile management (update email, change password)
-- [ ] Job execution history/logs
+- [x] ~~User profile management (update email, change password)~~ **COMPLETED**
+- [x] ~~Job execution history/logs~~ **COMPLETED**
+- [ ] Password reset functionality *(Not needed for internal QA team application)*
 - [ ] Email notifications on job failure
 - [ ] Webhook retry logic with exponential backoff
 - [ ] Job dependency management
@@ -1191,6 +1191,144 @@ curl -X DELETE http://localhost:5001/api/jobs/8c19f741-1a44-4d4b-b71e-638bb614d1
 
 ---
 
+### 7. View Job Execution History
+
+**Endpoint:** `GET /api/jobs/<job_id>/executions`
+
+**Description:** Get complete execution history for a specific job
+
+**Required Role:** All authenticated users
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Query Parameters:**
+- `status` (optional) - Filter by status: `success`, `failed`, `running`
+- `trigger_type` (optional) - Filter by trigger type: `scheduled`, `manual`
+- `limit` (optional) - Limit results (default: 50)
+- `offset` (optional) - Pagination offset (default: 0)
+
+**Response (200 OK):**
+```json
+{
+  "job_id": "9d4c2282-9b95-4f79-823b-43c73fc3f7c7",
+  "job_name": "Daily Test Job",
+  "total_executions": 5,
+  "executions": [
+    {
+      "id": "exec-uuid-1",
+      "job_id": "9d4c2282-9b95-4f79-823b-43c73fc3f7c7",
+      "status": "success",
+      "trigger_type": "scheduled",
+      "started_at": "2025-12-13T10:00:00+00:00",
+      "completed_at": "2025-12-13T10:00:15+00:00",
+      "duration_seconds": 15.234,
+      "execution_type": "webhook",
+      "target": "https://example.com/webhook",
+      "response_status": 200,
+      "error_message": null,
+      "output": "Success response body"
+    }
+  ]
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:5001/api/jobs/<job_id>/executions \
+  -H "Authorization: Bearer <access_token>" | jq .
+```
+
+---
+
+### 8. Get Specific Execution Details
+
+**Endpoint:** `GET /api/jobs/<job_id>/executions/<execution_id>`
+
+**Description:** Get detailed information about a specific job execution
+
+**Required Role:** All authenticated users
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "execution": {
+    "id": "exec-uuid-1",
+    "job_id": "9d4c2282-9b95-4f79-823b-43c73fc3f7c7",
+    "job_name": "Daily Test Job",
+    "status": "success",
+    "trigger_type": "scheduled",
+    "started_at": "2025-12-13T10:00:00+00:00",
+    "completed_at": "2025-12-13T10:00:15+00:00",
+    "duration_seconds": 15.234,
+    "execution_type": "webhook",
+    "target": "https://example.com/webhook",
+    "response_status": 200,
+    "error_message": null,
+    "output": "Success response body"
+  }
+}
+```
+
+**Error Responses:**
+- `404 Not Found` - Job or execution not found
+
+**Example:**
+```bash
+curl http://localhost:5001/api/jobs/<job_id>/executions/<execution_id> \
+  -H "Authorization: Bearer <access_token>" | jq .
+```
+
+---
+
+### 9. Get Execution Statistics
+
+**Endpoint:** `GET /api/jobs/<job_id>/executions/stats`
+
+**Description:** Get summary statistics for all executions of a job
+
+**Required Role:** All authenticated users
+
+**Headers:**
+```
+Authorization: Bearer <access_token>
+```
+
+**Response (200 OK):**
+```json
+{
+  "job_id": "9d4c2282-9b95-4f79-823b-43c73fc3f7c7",
+  "job_name": "Daily Test Job",
+  "latest_execution": {
+    "status": "success",
+    "completed_at": "2025-12-13T10:00:15+00:00"
+  },
+  "statistics": {
+    "total_executions": 25,
+    "success_count": 23,
+    "failed_count": 2,
+    "running_count": 0,
+    "success_rate": 92.0,
+    "average_duration_seconds": 12.5
+  }
+}
+```
+
+**Example:**
+```bash
+curl http://localhost:5001/api/jobs/<job_id>/executions/stats \
+  -H "Authorization: Bearer <access_token>" | jq .
+```
+
+---
+
 ## Validation Summary
 
 ### Global Validations (All Endpoints)
@@ -1198,6 +1336,7 @@ curl -X DELETE http://localhost:5001/api/jobs/8c19f741-1a44-4d4b-b71e-638bb614d1
 - ✅ **JSON Parsing** - Validates request body is valid JSON
 
 ### Field-Specific Validations
+
 
 | Field | Validations |
 |-------|------------|
@@ -1358,6 +1497,13 @@ Role: admin
 | GET | `/api/jobs/<id>` | Yes | All | Get job details |
 | PUT | `/api/jobs/<id>` | Yes | Admin, Owner | Update job |
 | DELETE | `/api/jobs/<id>` | Yes | Admin, Owner | Delete job |
+
+### Job Execution History Endpoints
+| Method | Endpoint | Auth Required | Role Required | Description |
+|--------|----------|---------------|---------------|-------------|
+| GET | `/api/jobs/<id>/executions` | Yes | All | View execution history |
+| GET | `/api/jobs/<id>/executions/<exec_id>` | Yes | All | Get execution details |
+| GET | `/api/jobs/<id>/executions/stats` | Yes | All | Get execution statistics |
 
 ## License
 

@@ -3,8 +3,10 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 from croniter import croniter
 from apscheduler.triggers.cron import CronTrigger
+from sqlalchemy import desc
 from models import db
 from models.job import Job
+from models.job_execution import JobExecution
 from scheduler import scheduler
 from scheduler.job_executor import execute_job
 from utils.auth import role_required, get_current_user, can_modify_job, is_admin
@@ -464,6 +466,178 @@ def delete_job(job_id):
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error deleting job {job_id}: {str(e)}")
+        return jsonify({
+            'error': ERROR_INTERNAL_SERVER,
+            'message': str(e)
+        }), 500
+
+
+@jobs_bp.route('/jobs/<job_id>/executions', methods=['GET'])
+@jwt_required()
+def get_job_executions(job_id):
+    """
+    Get execution history for a specific job.
+    
+    Query Parameters:
+        - limit (optional): Maximum number of executions to return (default: 50, max: 200)
+        - status (optional): Filter by status ('success', 'failed', 'running')
+        - trigger_type (optional): Filter by trigger type ('scheduled', 'manual')
+    
+    Headers:
+        Authorization: Bearer <access_token>
+    
+    Returns:
+        200: List of job executions
+        404: Job not found
+        500: Internal server error
+    """
+    try:
+        # Check if job exists
+        job = Job.query.get(job_id)
+        if not job:
+            return jsonify({
+                'error': ERROR_JOB_NOT_FOUND,
+                'message': f'No job found with ID: {job_id}'
+            }), 404
+        
+        # Parse query parameters
+        limit = request.args.get('limit', default=50, type=int)
+        limit = min(limit, 200)  # Cap at 200
+        status = request.args.get('status')
+        trigger_type = request.args.get('trigger_type')
+        
+        # Build query
+        query = JobExecution.query.filter_by(job_id=job_id)
+        
+        # Apply filters
+        if status:
+            query = query.filter_by(status=status)
+        if trigger_type:
+            query = query.filter_by(trigger_type=trigger_type)
+        
+        # Order by most recent first and apply limit
+        executions = query.order_by(desc(JobExecution.started_at)).limit(limit).all()
+        
+        return jsonify({
+            'job_id': job_id,
+            'job_name': job.name,
+            'total_executions': len(executions),
+            'executions': [execution.to_dict() for execution in executions]
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching executions for job {job_id}: {str(e)}")
+        return jsonify({
+            'error': ERROR_INTERNAL_SERVER,
+            'message': str(e)
+        }), 500
+
+
+@jobs_bp.route('/jobs/<job_id>/executions/<execution_id>', methods=['GET'])
+@jwt_required()
+def get_job_execution_details(job_id, execution_id):
+    """
+    Get details of a specific job execution.
+    
+    Headers:
+        Authorization: Bearer <access_token>
+    
+    Returns:
+        200: Execution details
+        404: Job or execution not found
+        500: Internal server error
+    """
+    try:
+        # Check if job exists
+        job = Job.query.get(job_id)
+        if not job:
+            return jsonify({
+                'error': ERROR_JOB_NOT_FOUND,
+                'message': f'No job found with ID: {job_id}'
+            }), 404
+        
+        # Get execution
+        execution = JobExecution.query.filter_by(id=execution_id, job_id=job_id).first()
+        if not execution:
+            return jsonify({
+                'error': 'Execution not found',
+                'message': f'No execution found with ID: {execution_id} for job: {job_id}'
+            }), 404
+        
+        return jsonify({
+            'job': {
+                'id': job.id,
+                'name': job.name
+            },
+            'execution': execution.to_dict()
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching execution {execution_id} for job {job_id}: {str(e)}")
+        return jsonify({
+            'error': ERROR_INTERNAL_SERVER,
+            'message': str(e)
+        }), 500
+
+
+@jobs_bp.route('/jobs/<job_id>/executions/stats', methods=['GET'])
+@jwt_required()
+def get_job_execution_stats(job_id):
+    """
+    Get execution statistics for a specific job.
+    
+    Headers:
+        Authorization: Bearer <access_token>
+    
+    Returns:
+        200: Execution statistics
+        404: Job not found
+        500: Internal server error
+    """
+    try:
+        # Check if job exists
+        job = Job.query.get(job_id)
+        if not job:
+            return jsonify({
+                'error': ERROR_JOB_NOT_FOUND,
+                'message': f'No job found with ID: {job_id}'
+            }), 404
+        
+        # Get counts by status
+        total = JobExecution.query.filter_by(job_id=job_id).count()
+        success = JobExecution.query.filter_by(job_id=job_id, status='success').count()
+        failed = JobExecution.query.filter_by(job_id=job_id, status='failed').count()
+        running = JobExecution.query.filter_by(job_id=job_id, status='running').count()
+        
+        # Get latest execution
+        latest_execution = JobExecution.query.filter_by(job_id=job_id).order_by(desc(JobExecution.started_at)).first()
+        
+        # Calculate success rate
+        success_rate = (success / total * 100) if total > 0 else 0
+        
+        # Get average duration for successful executions
+        successful_executions = JobExecution.query.filter_by(job_id=job_id, status='success').all()
+        avg_duration = None
+        if successful_executions:
+            durations = [e.duration_seconds for e in successful_executions if e.duration_seconds is not None]
+            avg_duration = sum(durations) / len(durations) if durations else None
+        
+        return jsonify({
+            'job_id': job_id,
+            'job_name': job.name,
+            'statistics': {
+                'total_executions': total,
+                'success_count': success,
+                'failed_count': failed,
+                'running_count': running,
+                'success_rate': round(success_rate, 2),
+                'average_duration_seconds': round(avg_duration, 2) if avg_duration else None
+            },
+            'latest_execution': latest_execution.to_dict() if latest_execution else None
+        }), 200
+        
+    except Exception as e:
+        logger.error(f"Error fetching execution stats for job {job_id}: {str(e)}")
         return jsonify({
             'error': ERROR_INTERNAL_SERVER,
             'message': str(e)
