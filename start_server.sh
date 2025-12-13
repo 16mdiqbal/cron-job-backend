@@ -2,14 +2,14 @@
 
 # Stop any existing server
 echo "Stopping any existing Flask server..."
-pkill -f "python app.py" 2>/dev/null || true
+pkill -f "python -m src.app" 2>/dev/null || true
 sleep 1
 
 # Start the server
 echo "Starting Flask server..."
 cd /Users/mohammadiqbal/Documents/Workspace/cron-job-backend
 source venv/bin/activate
-python app.py &
+python -m src.app &
 SERVER_PID=$!
 
 echo "Server started with PID: $SERVER_PID"

@@ -12,6 +12,9 @@ A production-ready Flask-based REST API for scheduling and managing cron jobs wi
 - ✅ **Cron Expression Validation** - Validates cron syntax before saving
 - ✅ **Dual Execution Modes** - Support for both GitHub Actions workflows and webhook URLs
 - ✅ **Flexible Metadata** - Store custom JSON metadata with each job
+- ✅ **Email Notifications** - Send alerts on job failure with detailed error information
+- ✅ **Job Execution History** - Track execution results, status, and duration
+- ✅ **Execution Statistics** - Analyze job performance with success rates and metrics
 - ✅ **Persistent Storage** - SQLite database (production-ready for MySQL migration)
 - ✅ **Background Scheduler** - APScheduler with SQLAlchemy job store
 - ✅ **CORS Enabled** - Ready for frontend integration with proper auth headers
@@ -39,7 +42,8 @@ cron-job-backend/
 │   └── jobs.py            # Job API endpoints (Blueprint)
 ├── utils/
 │   ├── __init__.py        # Utilities package
-│   └── auth.py            # Auth decorators and helpers
+│   ├── auth.py            # Auth decorators and helpers
+│   └── email.py           # Email notification utilities
 ├── scheduler/
 │   ├── __init__.py        # Scheduler initialization
 │   └── job_executor.py    # Job execution functions
@@ -941,8 +945,8 @@ rm instance/cron_jobs.db-journal
 - [x] ~~Authentication & authorization~~ **COMPLETED**
 - [x] ~~User profile management (update email, change password)~~ **COMPLETED**
 - [x] ~~Job execution history/logs~~ **COMPLETED**
+- [x] ~~Email notifications on job failure~~ **COMPLETED**
 - [ ] Password reset functionality *(Not needed for internal QA team application)*
-- [ ] Email notifications on job failure
 - [ ] Webhook retry logic with exponential backoff
 - [ ] Job dependency management
 - [ ] Web UI dashboard
@@ -1328,6 +1332,193 @@ curl http://localhost:5001/api/jobs/<job_id>/executions/stats \
 ```
 
 ---
+
+## Email Notifications
+
+### Overview
+
+The job scheduler supports **optional email notifications** when jobs fail. Email notifications are **disabled by default** - you must explicitly enable them for each job.
+
+When enabled, you can:
+- Send email alerts on job failure with detailed error information
+- Optionally receive success confirmations for critical jobs
+- Configure different email recipients per job
+- Use HTML or plain text email format
+
+### Features
+
+- **Explicit Toggle**: Email notifications disabled by default, must be explicitly enabled per job
+- **Failure Alerts**: Automatically send emails when a job fails
+- **Success Notifications**: Optional email confirmations for critical jobs (when enabled)
+- **HTML & Text Emails**: Rich HTML emails with fallback plain text
+- **Error Details**: Emails include job name, ID, error message, and execution details
+- **Multiple Recipients**: Configure different email addresses per job
+- **SMTP Support**: Works with Gmail, Outlook, custom SMTP servers
+
+### Configuration
+
+Email notifications are configured via environment variables in your `.env` file:
+
+```bash
+# Enable/disable email notifications globally
+MAIL_ENABLED=True
+
+# SMTP Server Settings (Gmail example)
+MAIL_SERVER=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USE_TLS=True
+MAIL_USERNAME=your-email@gmail.com
+MAIL_PASSWORD=your-app-password  # Use app-specific password for Gmail
+MAIL_DEFAULT_SENDER=noreply@cronjobscheduler.local
+
+# Alternative: Custom SMTP Server
+MAIL_SERVER=smtp.company.com
+MAIL_PORT=587
+MAIL_USERNAME=user@company.com
+MAIL_PASSWORD=your-password
+```
+
+### Gmail Setup
+
+To use Gmail for email notifications:
+
+1. **Enable 2-Step Verification** in your Google Account
+2. **Generate App Password**:
+   - Go to [Google Account Security](https://myaccount.google.com/security)
+   - Create an **App Password** for "Mail" and "Windows Computer"
+   - Copy the generated 16-character password
+3. **Update .env file**:
+   ```bash
+   MAIL_USERNAME=your-email@gmail.com
+   MAIL_PASSWORD=your-16-character-app-password
+   ```
+
+### Job Configuration
+
+When creating or updating a job, include the email notification settings:
+
+**Create Job WITH Email Notifications (Enabled):**
+
+```json
+{
+  "name": "Critical Data Sync Job",
+  "cron_expression": "0 2 * * *",
+  "target_url": "https://api.example.com/sync",
+  "enable_email_notifications": true,
+  "notification_emails": ["admin@example.com", "devops@example.com"],
+  "notify_on_success": false
+}
+```
+
+**Create Job WITHOUT Email Notifications (Disabled - Default):**
+
+```json
+{
+  "name": "Regular Sync Job",
+  "cron_expression": "0 3 * * *",
+  "target_url": "https://api.example.com/sync"
+}
+```
+Note: `enable_email_notifications` defaults to `false`. No email fields needed if disabled.
+
+**Update Job to Enable Notifications:**
+
+```json
+{
+  "enable_email_notifications": true,
+  "notification_emails": ["alerts@example.com"],
+  "notify_on_success": false
+}
+```
+
+**Update Job to Disable Notifications:**
+
+```json
+{
+  "enable_email_notifications": false
+}
+```
+Note: When disabling, email addresses are cleared automatically.
+
+### Email Recipients
+
+When `enable_email_notifications` is `true`, you can specify one or more recipients:
+
+```json
+{
+  "enable_email_notifications": true,
+  "notification_emails": [
+    "admin@example.com",
+    "devops@example.com",
+    "alerts@example.com"
+  ]
+}
+```
+
+### Email Content
+
+**Failure Email Example:**
+
+Subject: `🔴 Job Failure Alert: Critical Data Sync Job`
+
+```
+Job Execution Failed
+====================
+
+Job Name: Critical Data Sync Job
+Job ID: 9d4c2282-9b95-4f79-823b-43c73fc3f7c7
+Error: Webhook returned status 500
+
+Please review your job configuration and logs to identify and resolve the issue.
+```
+
+**Success Email Example:**
+
+Subject: `✅ Job Success: Critical Data Sync Job`
+
+```
+Job Completed Successfully
+==========================
+
+Job Name: Critical Data Sync Job
+Job ID: 9d4c2282-9b95-4f79-823b-43c73fc3f7c7
+Duration: 45.23 seconds
+
+No action is required. This is an informational notification.
+```
+
+### Best Practices
+
+1. **Use Distribution Lists**: Use email groups/lists instead of individual addresses for better team communication
+2. **Production Setup**: Use dedicated SMTP accounts, not personal emails
+3. **Error Monitoring**: Enable success notifications only for critical jobs to avoid email fatigue
+4. **Test Configuration**: Send a test email by intentionally failing a job after setup
+5. **Log Monitoring**: Check application logs to confirm email delivery attempts
+
+### Troubleshooting
+
+**No emails being sent?**
+
+1. Verify `MAIL_ENABLED=True` in your `.env` file
+2. Check `MAIL_USERNAME` and `MAIL_PASSWORD` are correct
+3. Ensure job has `notification_emails` configured
+4. Check application logs for SMTP errors: `grep -i "mail\|email" app.log`
+5. Verify firewall/network allows outbound SMTP connections on `MAIL_PORT`
+
+**Gmail shows "Less secure app" error?**
+
+- Use **App Passwords** instead of your regular Gmail password
+- Enable 2-Step Verification first, then create an App Password
+
+**Custom SMTP not working?**
+
+- Verify SMTP server address and port
+- Test credentials with `telnet MAIL_SERVER MAIL_PORT`
+- Check if authentication is required and certificate validation is needed
+
+---
+
+## Job Execution History
 
 ## Validation Summary
 
