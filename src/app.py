@@ -1,4 +1,5 @@
 import logging
+import os
 from flask import Flask
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
@@ -7,6 +8,7 @@ from apscheduler.triggers.cron import CronTrigger
 from config import Config
 from models import db
 from models.job import Job
+from utils.email import mail
 from scheduler import scheduler
 from scheduler.job_executor import execute_job
 from routes.jobs import jobs_bp
@@ -47,47 +49,56 @@ def create_app():
     # Initialize SQLAlchemy
     db.init_app(app)
 
+    # Initialize Flask-Mail
+    mail.init_app(app)
+
     # Create database tables
     with app.app_context():
         db.create_all()
         logger.info("Database tables created successfully")
 
-    # Configure and start APScheduler
-    scheduler.configure(
-        jobstores=app.config['SCHEDULER_JOBSTORES'],
-        executors=app.config['SCHEDULER_EXECUTORS'],
-        job_defaults=app.config['SCHEDULER_JOB_DEFAULTS'],
-        timezone=app.config['SCHEDULER_TIMEZONE']
-    )
+    # Configure and start APScheduler (unless disabled for testing)
+    scheduler_enabled = os.getenv('SCHEDULER_ENABLED', 'true').lower() != 'false'
+    
+    if scheduler_enabled:
+        scheduler.configure(
+            jobstores=app.config['SCHEDULER_JOBSTORES'],
+            executors=app.config['SCHEDULER_EXECUTORS'],
+            job_defaults=app.config['SCHEDULER_JOB_DEFAULTS'],
+            timezone=app.config['SCHEDULER_TIMEZONE']
+        )
 
-    # Load existing jobs from database into scheduler
-    with app.app_context():
-        existing_jobs = Job.query.filter_by(is_active=True).all()
-        for job in existing_jobs:
-            try:
-                trigger = CronTrigger.from_crontab(job.cron_expression)
-                job_config = {
-                    'target_url': job.target_url,
-                    'github_owner': job.github_owner,
-                    'github_repo': job.github_repo,
-                    'github_workflow_name': job.github_workflow_name,
-                    'metadata': job.get_metadata()
-                }
-                scheduler.add_job(
-                    func=execute_job,
-                    trigger=trigger,
-                    args=[job.id, job.name, job_config],
-                    id=job.id,
-                    name=job.name,
-                    replace_existing=True
-                )
-                logger.info(f"Loaded job '{job.name}' (ID: {job.id}) into scheduler")
-            except Exception as e:
-                logger.error(f"Failed to load job '{job.name}': {str(e)}")
+        # Load existing jobs from database into scheduler
+        with app.app_context():
+            existing_jobs = Job.query.filter_by(is_active=True).all()
+            for job in existing_jobs:
+                try:
+                    trigger = CronTrigger.from_crontab(job.cron_expression)
+                    job_config = {
+                        'target_url': job.target_url,
+                        'github_owner': job.github_owner,
+                        'github_repo': job.github_repo,
+                        'github_workflow_name': job.github_workflow_name,
+                        'metadata': job.get_metadata(),
+                        'enable_email_notifications': job.enable_email_notifications,
+                        'notification_emails': job.get_notification_emails(),
+                        'notify_on_success': job.notify_on_success
+                    }
+                    scheduler.add_job(
+                        func=execute_job,
+                        trigger=trigger,
+                        args=[job.id, job.name, job_config],
+                        id=job.id,
+                        name=job.name,
+                        replace_existing=True
+                    )
+                    logger.info(f"Loaded job '{job.name}' (ID: {job.id}) into scheduler")
+                except Exception as e:
+                    logger.error(f"Failed to load job '{job.name}': {str(e)}")
 
-    if not scheduler.running:
-        scheduler.start()
-        logger.info("APScheduler started successfully")
+        if not scheduler.running:
+            scheduler.start()
+            logger.info("APScheduler started successfully")
 
     # Register Blueprints
     app.register_blueprint(auth_bp)

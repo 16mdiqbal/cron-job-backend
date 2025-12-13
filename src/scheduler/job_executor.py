@@ -3,6 +3,9 @@ import requests
 import os
 from datetime import datetime, timezone
 from models import db, JobExecution
+from models.job import Job
+from utils.email import send_job_failure_notification, send_job_success_notification
+from flask import current_app
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +28,9 @@ def execute_job(job_id, job_name, job_config, trigger_type='scheduled'):
             - github_repo (optional): GitHub repository name
             - github_workflow_name (optional): GitHub workflow file name
             - metadata (optional): Job metadata to pass as workflow inputs
+            - enable_email_notifications (optional): Whether email notifications are enabled
+            - notification_emails (optional): List of emails to notify on failure
+            - notify_on_success (optional): Whether to notify on success
         trigger_type (str): Type of trigger ('scheduled' or 'manual')
     """
     logger.info(f"Executing job '{job_name}' (ID: {job_id}) at {datetime.now(timezone.utc).isoformat()}")
@@ -48,12 +54,30 @@ def execute_job(job_id, job_name, job_config, trigger_type='scheduled'):
             logger.error(error_msg)
             execution.mark_completed('failed', error_message=error_msg)
             db.session.commit()
+            
+            # Send failure notification only if enabled
+            if job_config.get('enable_email_notifications'):
+                notification_emails = job_config.get('notification_emails', [])
+                if notification_emails:
+                    try:
+                        send_job_failure_notification(job_name, job_id, error_msg, notification_emails)
+                    except Exception as e:
+                        logger.error(f"Failed to send failure notification: {str(e)}")
         
     except Exception as e:
         error_msg = f"Unexpected error executing job '{job_name}': {str(e)}"
         logger.error(error_msg)
         execution.mark_completed('failed', error_message=error_msg)
         db.session.commit()
+        
+        # Send failure notification only if enabled
+        if job_config.get('enable_email_notifications'):
+            notification_emails = job_config.get('notification_emails', [])
+            if notification_emails:
+                try:
+                    send_job_failure_notification(job_name, job_id, error_msg, notification_emails)
+                except Exception as e:
+                    logger.error(f"Failed to send failure notification: {str(e)}")
 
 
 def execute_github_actions(job_name, job_config, execution):
@@ -110,18 +134,45 @@ def execute_github_actions(job_name, job_config, execution):
         if response.status_code == 204:
             logger.info(f"Job '{job_name}' - GitHub Actions workflow triggered successfully")
             execution.mark_completed('success', response_status=204, output=f"Workflow triggered successfully on branch {ref}")
+            db.session.commit()
+            
+            # Send success notification only if enabled
+            if job_config.get('enable_email_notifications') and job_config.get('notify_on_success'):
+                notification_emails = job_config.get('notification_emails', [])
+                if notification_emails:
+                    try:
+                        duration = execution.duration_seconds if execution.duration_seconds else 0
+                        send_job_success_notification(job_name, job_id, duration, notification_emails)
+                    except Exception as e:
+                        logger.error(f"Failed to send success notification: {str(e)}")
         else:
             error_msg = f"GitHub Actions dispatch failed. Status: {response.status_code}, Response: {response.text}"
             logger.error(f"Job '{job_name}' - {error_msg}")
             execution.mark_completed('failed', response_status=response.status_code, error_message=error_msg)
-        
-        db.session.commit()
+            db.session.commit()
+            
+            # Send failure notification only if enabled
+            if job_config.get('enable_email_notifications'):
+                notification_emails = job_config.get('notification_emails', [])
+                if notification_emails:
+                    try:
+                        send_job_failure_notification(job_name, job_id, error_msg, notification_emails)
+                    except Exception as e:
+                        logger.error(f"Failed to send failure notification: {str(e)}")
     
     except requests.exceptions.RequestException as e:
         error_msg = f"GitHub Actions request failed: {str(e)}"
         logger.error(f"Job '{job_name}' - {error_msg}")
         execution.mark_completed('failed', error_message=error_msg)
         db.session.commit()
+        
+        # Send failure notification
+        notification_emails = job_config.get('notification_emails', [])
+        if notification_emails:
+            try:
+                send_job_failure_notification(job_name, job_id, error_msg, notification_emails)
+            except Exception as send_error:
+                logger.error(f"Failed to send failure notification: {str(send_error)}")
 
 
 def execute_webhook(job_name, target_url, execution):
@@ -149,18 +200,47 @@ def execute_webhook(job_name, target_url, execution):
         
         if response.status_code >= 200 and response.status_code < 300:
             execution.mark_completed('success', response_status=response.status_code, output=output)
+            db.session.commit()
+            
+            # Send success notification only if enabled
+            if job_config.get('enable_email_notifications') and job_config.get('notify_on_success'):
+                notification_emails = job_config.get('notification_emails', [])
+                if notification_emails:
+                    try:
+                        duration = execution.duration_seconds if execution.duration_seconds else 0
+                        send_job_success_notification(job_name, job_id, duration, notification_emails)
+                    except Exception as e:
+                        logger.error(f"Failed to send success notification: {str(e)}")
         else:
+            error_msg = f"Webhook returned status {response.status_code}"
             execution.mark_completed('failed', response_status=response.status_code, 
-                                   error_message=f"Webhook returned status {response.status_code}", 
+                                   error_message=error_msg, 
                                    output=output)
-        
-        db.session.commit()
+            db.session.commit()
+            
+            # Send failure notification only if enabled
+            if job_config.get('enable_email_notifications'):
+                notification_emails = job_config.get('notification_emails', [])
+                if notification_emails:
+                    try:
+                        send_job_failure_notification(job_name, job_id, error_msg, notification_emails)
+                    except Exception as e:
+                        logger.error(f"Failed to send failure notification: {str(e)}")
     
     except requests.exceptions.RequestException as e:
         error_msg = f"Webhook call failed: {str(e)}"
         logger.error(f"Job '{job_name}' - {error_msg}")
         execution.mark_completed('failed', error_message=error_msg)
         db.session.commit()
+        
+        # Send failure notification only if enabled
+        if job_config.get('enable_email_notifications'):
+            notification_emails = job_config.get('notification_emails', [])
+            if notification_emails:
+                try:
+                    send_job_failure_notification(job_name, job_id, error_msg, notification_emails)
+                except Exception as send_error:
+                    logger.error(f"Failed to send failure notification: {str(send_error)}")
 
 
 def trigger_job_manually(job_id, job_name, job_config):

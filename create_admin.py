@@ -6,6 +6,7 @@ Usage:
     python create_admin.py
 """
 import sys
+sys.path.insert(0, 'src')
 from app import app
 from models import db
 from models.user import User

@@ -90,6 +90,9 @@ def create_job():
         github_repo = data.get('github_repo', '').strip() or None
         github_workflow_name = data.get('github_workflow_name', '').strip() or None
         metadata = data.get('metadata', {})
+        enable_email_notifications = data.get('enable_email_notifications', False)
+        notification_emails = data.get('notification_emails', []) if enable_email_notifications else []
+        notify_on_success = data.get('notify_on_success', False) if enable_email_notifications else False
 
         # Validate that at least one target is provided (target_url OR GitHub config)
         if not target_url and not (github_owner and github_repo and github_workflow_name):
@@ -110,12 +113,18 @@ def create_job():
             github_repo=github_repo,
             github_workflow_name=github_workflow_name,
             created_by=current_user.id if current_user else None,
-            is_active=True
+            is_active=True,
+            enable_email_notifications=enable_email_notifications,
+            notify_on_success=notify_on_success
         )
         
         # Set metadata if provided
         if metadata:
             new_job.set_metadata(metadata)
+        
+        # Set notification emails if provided and enabled
+        if enable_email_notifications and notification_emails:
+            new_job.set_notification_emails(notification_emails)
 
         db.session.add(new_job)
         db.session.commit()
@@ -128,7 +137,10 @@ def create_job():
                 'github_owner': new_job.github_owner,
                 'github_repo': new_job.github_repo,
                 'github_workflow_name': new_job.github_workflow_name,
-                'metadata': new_job.get_metadata()
+                'metadata': new_job.get_metadata(),
+                'enable_email_notifications': new_job.enable_email_notifications,
+                'notification_emails': new_job.get_notification_emails(),
+                'notify_on_success': new_job.notify_on_success
             }
             scheduler.add_job(
                 func=execute_job,
@@ -335,6 +347,29 @@ def update_job(job_id):
             job.set_metadata(data['metadata'])
             needs_scheduler_update = True
         
+        # Update email notification settings if provided
+        if 'enable_email_notifications' in data:
+            job.enable_email_notifications = bool(data['enable_email_notifications'])
+            # Clear emails if notifications are being disabled
+            if not job.enable_email_notifications:
+                job.set_notification_emails([])
+                job.notify_on_success = False
+            needs_scheduler_update = True
+        
+        # Update notification emails if provided (only if notifications enabled)
+        if 'notification_emails' in data:
+            if job.enable_email_notifications:
+                job.set_notification_emails(data['notification_emails'])
+            else:
+                # If notifications are disabled, clear the emails
+                job.set_notification_emails([])
+            needs_scheduler_update = True
+        
+        # Update notify_on_success if provided
+        if 'notify_on_success' in data:
+            job.notify_on_success = bool(data['notify_on_success']) if job.enable_email_notifications else False
+            needs_scheduler_update = True
+        
         # Update is_active if provided
         if 'is_active' in data:
             new_status = bool(data['is_active'])
@@ -367,7 +402,10 @@ def update_job(job_id):
                         'github_owner': job.github_owner,
                         'github_repo': job.github_repo,
                         'github_workflow_name': job.github_workflow_name,
-                        'metadata': job.get_metadata()
+                        'metadata': job.get_metadata(),
+                        'enable_email_notifications': job.enable_email_notifications,
+                        'notification_emails': job.get_notification_emails(),
+                        'notify_on_success': job.notify_on_success
                     }
                     scheduler.add_job(
                         func=execute_job,

@@ -25,6 +25,11 @@ class Job(db.Model):
     # Flexible metadata as JSON (renamed to avoid SQLAlchemy reserved name)
     job_metadata = db.Column(db.Text, nullable=True)
     
+    # Email notification settings
+    enable_email_notifications = db.Column(db.Boolean, default=False, nullable=False)
+    notification_emails = db.Column(db.Text, nullable=True)
+    notify_on_success = db.Column(db.Boolean, default=False, nullable=False)
+    
     # User who created this job (for ownership and authorization)
     created_by = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=True)
     
@@ -42,6 +47,30 @@ class Job(db.Model):
             except json.JSONDecodeError:
                 return {}
         return {}
+
+    def get_notification_emails(self):
+        """
+        Parse and return notification emails as a list.
+        """
+        if self.notification_emails:
+            # Split by comma and strip whitespace
+            emails = [email.strip() for email in self.notification_emails.split(',')]
+            return [email for email in emails if email]
+        return []
+
+    def set_notification_emails(self, emails):
+        """
+        Store notification emails as comma-separated string.
+        
+        Args:
+            emails (list or str): Email address(es) to store
+        """
+        if isinstance(emails, list):
+            self.notification_emails = ','.join(emails) if emails else None
+        elif isinstance(emails, str):
+            self.notification_emails = emails if emails else None
+        else:
+            self.notification_emails = None
 
     def set_metadata(self, metadata_dict):
         """
@@ -65,6 +94,9 @@ class Job(db.Model):
             'github_repo': self.github_repo,
             'github_workflow_name': self.github_workflow_name,
             'metadata': self.get_metadata(),
+            'enable_email_notifications': self.enable_email_notifications,
+            'notification_emails': self.get_notification_emails(),
+            'notify_on_success': self.notify_on_success,
             'created_by': self.created_by,
             'is_active': self.is_active,
             'created_at': self.created_at.isoformat() if self.created_at else None,

@@ -1,0 +1,3 @@
+"""
+Test auth package initialization.
+"""
