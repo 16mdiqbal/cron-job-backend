@@ -3,12 +3,30 @@ import requests
 import os
 from datetime import datetime, timezone
 from ..models import db, JobExecution
-from ..models.job import Job
 from ..utils.email import send_job_failure_notification, send_job_success_notification
 from ..utils.notifications import broadcast_job_success, broadcast_job_failure
-from flask import current_app
 
 logger = logging.getLogger(__name__)
+
+_flask_app = None
+
+
+def set_flask_app(app):
+    global _flask_app
+    _flask_app = app
+
+
+def execute_job_with_app_context(job_id, job_name, job_config):
+    """
+    APScheduler entrypoint that ensures a Flask app context exists.
+
+    Flask-SQLAlchemy sessions are scoped to the Flask application context; when APScheduler
+    runs jobs on background threads there is no context by default.
+    """
+    if _flask_app is None:
+        raise RuntimeError("Flask app not set for scheduler. Call set_flask_app(app) during startup.")
+    with _flask_app.app_context():
+        execute_job(job_id, job_name, job_config, trigger_type='scheduled')
 
 
 def execute_job(job_id, job_name, job_config, trigger_type='scheduled'):
@@ -44,7 +62,7 @@ def execute_job(job_id, job_name, job_config, trigger_type='scheduled'):
     try:
         # Priority 1: GitHub Actions workflow dispatch
         if job_config.get('github_owner') and job_config.get('github_repo') and job_config.get('github_workflow_name'):
-            result = execute_github_actions(job_name, job_config, execution)
+            result = execute_github_actions(job_id, job_name, job_config, execution)
         
         # Priority 2: Generic webhook URL
         elif job_config.get('target_url'):
@@ -81,7 +99,7 @@ def execute_job(job_id, job_name, job_config, trigger_type='scheduled'):
                     logger.error(f"Failed to send failure notification: {str(e)}")
 
 
-def execute_github_actions(job_name, job_config, execution):
+def execute_github_actions(job_id, job_name, job_config, execution):
     """
     Trigger a GitHub Actions workflow dispatch.
     
@@ -90,7 +108,7 @@ def execute_github_actions(job_name, job_config, execution):
         job_config (dict): Configuration with github_owner, github_repo, github_workflow_name, metadata
         execution (JobExecution): The execution record to update
     """
-    github_token = os.getenv('GITHUB_TOKEN')
+    github_token = job_config.get('github_token') or os.getenv('GITHUB_TOKEN')
     if not github_token:
         error_msg = f"GitHub token not configured. Cannot trigger workflow for job '{job_name}'"
         logger.error(error_msg)
@@ -112,7 +130,7 @@ def execute_github_actions(job_name, job_config, execution):
     db.session.commit()
     
     headers = {
-        'Authorization': f'token {github_token}',
+        'Authorization': f'Bearer {github_token}',
         'Accept': 'application/vnd.github.v3+json',
         'Content-Type': 'application/json'
     }
@@ -180,16 +198,14 @@ def execute_github_actions(job_name, job_config, execution):
         logger.error(f"Job '{job_name}' - {error_msg}")
         execution.mark_completed('failed', error_message=error_msg)
         db.session.commit()
-        
-        # Get job owner for bell notification
-        job = Job.query.get(job_id)
-        if job:
-            try:
-                create_job_failure_notification(job.owner_id, job_name, job_id, execution.id, error_msg)
-                logger.info(f"Bell notification sent: Job '{job_name}' failed (exception)")
-            except Exception as e:
-                logger.error(f"Failed to create failure notification: {str(e)}")
-        
+
+        # Broadcast failure notification to all users
+        try:
+            broadcast_job_failure(job_name, job_id, execution.id, error_msg)
+            logger.info(f"Broadcast notification sent: Job '{job_name}' failed (exception)")
+        except Exception as e:
+            logger.error(f"Failed to broadcast failure notification: {str(e)}")
+
         # Send failure notification
         notification_emails = job_config.get('notification_emails', [])
         if notification_emails:
@@ -218,7 +234,11 @@ def execute_webhook(job_id, job_name, target_url, job_config, execution):
     db.session.commit()
     
     try:
-        response = requests.get(target_url, timeout=10)
+        payload = job_config.get('metadata') if isinstance(job_config.get('metadata'), dict) else None
+        if payload:
+            response = requests.post(target_url, json=payload, timeout=10)
+        else:
+            response = requests.get(target_url, timeout=10)
         logger.info(f"Job '{job_name}' - Webhook called successfully. Status: {response.status_code}")
         
         # Truncate response text if too long

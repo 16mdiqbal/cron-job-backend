@@ -4,17 +4,19 @@ import io
 import json
 import os
 from typing import Optional, Dict, List
+from urllib.parse import urlparse
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 from croniter import croniter
 from apscheduler.triggers.cron import CronTrigger
 from zoneinfo import ZoneInfo
 from sqlalchemy import desc
+from sqlalchemy import func
 from ..models import db
 from ..models.job import Job
 from ..models.job_execution import JobExecution
 from ..scheduler import scheduler
-from ..scheduler.job_executor import execute_job
+from ..scheduler.job_executor import execute_job, execute_job_with_app_context, trigger_job_manually
 from ..utils.auth import role_required, get_current_user, can_modify_job, is_admin
 from ..utils.notifications import (
     broadcast_job_created,
@@ -40,6 +42,9 @@ def _get_scheduler_timezone():
     except Exception:
         logger.warning(f"Invalid SCHEDULER_TIMEZONE '{tz_name}', falling back to UTC")
         return ZoneInfo('UTC')
+
+def _get_default_github_owner() -> str:
+    return (os.getenv('DEFAULT_GITHUB_OWNER') or 'Pay-Baymax').strip()
 
 def _truthy(value: Optional[str]) -> bool:
     if value is None:
@@ -180,6 +185,21 @@ def create_job():
 
         # Validate that at least one target is provided (target_url OR GitHub config)
         if not target_url and not (github_owner and github_repo and github_workflow_name):
+            # Allow GitHub jobs without owner; default it to the configured org/owner.
+            if github_repo and github_workflow_name and not github_owner:
+                github_owner = _get_default_github_owner()
+            else:
+                return jsonify({
+                    'error': 'Missing target configuration',
+                    'message': 'Please provide either "target_url" or GitHub Actions configuration (github_owner, github_repo, github_workflow_name)'
+                }), 400
+
+        # If this is a GitHub job and owner is omitted, fill it in.
+        if not target_url and github_repo and github_workflow_name and not github_owner:
+            github_owner = _get_default_github_owner()
+
+        # Re-validate targets after defaulting.
+        if not target_url and not (github_owner and github_repo and github_workflow_name):
             return jsonify({
                 'error': 'Missing target configuration',
                 'message': 'Please provide either "target_url" or GitHub Actions configuration (github_owner, github_repo, github_workflow_name)'
@@ -228,7 +248,7 @@ def create_job():
                 'notify_on_success': new_job.notify_on_success
             }
             scheduler.add_job(
-                func=execute_job,
+                func=execute_job_with_app_context,
                 trigger=trigger,
                 args=[new_job.id, new_job.name, job_config],
                 id=new_job.id,
@@ -444,7 +464,7 @@ def bulk_upload_jobs():
                     'notify_on_success': job.notify_on_success,
                 }
                 scheduler.add_job(
-                    func=execute_job,
+                    func=execute_job_with_app_context,
                     trigger=trigger,
                     args=[job.id, job.name, job_config],
                     id=job.id,
@@ -646,6 +666,11 @@ def update_job(job_id):
         if 'github_workflow_name' in data:
             job.github_workflow_name = data['github_workflow_name'].strip() or None
             needs_scheduler_update = True
+
+        # If this is a GitHub job and owner is missing, default it.
+        if not job.target_url and job.github_repo and job.github_workflow_name and not job.github_owner:
+            job.github_owner = _get_default_github_owner()
+            needs_scheduler_update = True
         
         # Update metadata if provided
         if 'metadata' in data:
@@ -720,7 +745,7 @@ def update_job(job_id):
                         'notify_on_success': job.notify_on_success
                     }
                     scheduler.add_job(
-                        func=execute_job,
+                        func=execute_job_with_app_context,
                         trigger=trigger,
                         args=[job.id, job.name, job_config],
                         id=job.id,
@@ -851,6 +876,110 @@ def delete_job(job_id):
             'error': ERROR_INTERNAL_SERVER,
             'message': str(e)
         }), 500
+
+
+@jobs_bp.route('/jobs/<job_id>/execute', methods=['POST'])
+@jwt_required()
+@role_required('admin', 'user')
+def execute_job_now(job_id):
+    """
+    Execute a job immediately (manual trigger), optionally overriding runtime config.
+
+    Overrides are NOT persisted to the database; they apply only to this execution.
+
+    Expected JSON payload (all optional):
+    {
+      "metadata": { ... },              // overrides metadata for this run
+      "target_url": "https://...",      // only for webhook jobs
+      "github_owner": "...",            // only for GitHub jobs
+      "github_repo": "...",             // only for GitHub jobs
+      "github_workflow_name": "..."     // only for GitHub jobs
+    }
+    """
+    try:
+        job = Job.query.get(job_id)
+        if not job:
+            return jsonify({'error': ERROR_JOB_NOT_FOUND, 'message': f'No job found with ID: {job_id}'}), 404
+
+        # Authorization: admin can execute any; users can execute own jobs
+        if not can_modify_job(job):
+            return jsonify({'error': 'Insufficient permissions', 'message': 'You can only execute your own jobs'}), 403
+
+        data = request.get_json(silent=True) or {}
+        if not isinstance(data, dict):
+            return jsonify({'error': 'Invalid payload', 'message': 'JSON body must be an object.'}), 400
+
+        override_metadata = data.get('metadata')
+        if override_metadata is not None and not isinstance(override_metadata, dict):
+            return jsonify({'error': 'Invalid payload', 'message': '"metadata" must be a JSON object.'}), 400
+
+        github_token = (data.get('github_token') or '').strip() or None
+        dispatch_url = (data.get('dispatch_url') or '').strip() or None
+
+        def _parse_dispatch_url(value: str):
+            candidate = value if '://' in value else f'https://{value}'
+            parsed = urlparse(candidate)
+            path = parsed.path.strip('/')
+            parts = [p for p in path.split('/') if p]
+            # {owner}/{repo}/actions/workflows/{workflow}
+            if len(parts) >= 5 and parts[2] == 'actions' and parts[3] == 'workflows':
+                return parts[0], parts[1], parts[4]
+            raise ValueError('Invalid dispatch URL format. Expected /<owner>/<repo>/actions/workflows/<workflow>.')
+
+        base_config = {
+            'target_url': job.target_url,
+            'github_owner': job.github_owner,
+            'github_repo': job.github_repo,
+            'github_workflow_name': job.github_workflow_name,
+            'metadata': job.get_metadata(),
+            'enable_email_notifications': job.enable_email_notifications,
+            'notification_emails': job.get_notification_emails(),
+            'notify_on_success': job.notify_on_success,
+        }
+
+        # Apply overrides for same job type (do not allow switching target type here)
+        if job.target_url:
+            if 'target_url' in data:
+                base_config['target_url'] = (data.get('target_url') or '').strip() or job.target_url
+            # ignore github overrides for webhook jobs
+        else:
+            # GitHub job
+            if dispatch_url:
+                try:
+                    owner, repo, workflow_name = _parse_dispatch_url(dispatch_url)
+                except ValueError as e:
+                    return jsonify({'error': 'Invalid payload', 'message': str(e)}), 400
+                base_config['github_owner'] = owner
+                base_config['github_repo'] = repo
+                base_config['github_workflow_name'] = workflow_name
+
+            if 'github_owner' in data:
+                base_config['github_owner'] = (data.get('github_owner') or '').strip() or job.github_owner
+            if 'github_repo' in data:
+                base_config['github_repo'] = (data.get('github_repo') or '').strip() or job.github_repo
+            if 'github_workflow_name' in data:
+                base_config['github_workflow_name'] = (data.get('github_workflow_name') or '').strip() or job.github_workflow_name
+
+            if github_token:
+                base_config['github_token'] = github_token
+
+        if override_metadata is not None:
+            base_config['metadata'] = override_metadata
+
+        # Validate target config is still present
+        if not base_config.get('target_url') and not (
+            base_config.get('github_owner') and base_config.get('github_repo') and base_config.get('github_workflow_name')
+        ):
+            return jsonify({'error': 'Missing target configuration', 'message': 'Job has no valid target configuration to execute.'}), 400
+
+        # Manual execution (runs immediately)
+        # Call executor directly to avoid any import/name issues during runtime.
+        execute_job(job.id, job.name, base_config, trigger_type='manual')
+
+        return jsonify({'message': 'Job triggered successfully', 'job_id': job.id}), 200
+    except Exception as e:
+        logger.error(f"Error executing job {job_id}: {str(e)}")
+        return jsonify({'error': ERROR_INTERNAL_SERVER, 'message': str(e)}), 500
 
 
 @jobs_bp.route('/jobs/<job_id>/executions', methods=['GET'])
@@ -1023,6 +1152,123 @@ def get_job_execution_stats(job_id):
             'error': ERROR_INTERNAL_SERVER,
             'message': str(e)
         }), 500
+
+
+@jobs_bp.route('/executions', methods=['GET'])
+@jwt_required()
+def list_executions():
+    """
+    List executions across all jobs (All authenticated users).
+
+    Query Parameters:
+        - page (optional): Page number (default: 1)
+        - limit (optional): Page size (default: 20, max: 200)
+        - job_id (optional): Filter by job_id
+        - status (optional): success|failed|running
+        - trigger_type (optional): scheduled|manual
+        - execution_type (optional): github_actions|webhook
+    """
+    try:
+        page = request.args.get('page', default=1, type=int)
+        limit = request.args.get('limit', default=20, type=int)
+        limit = min(max(limit, 1), 200)
+        page = max(page, 1)
+
+        job_id = request.args.get('job_id')
+        status = request.args.get('status')
+        trigger_type = request.args.get('trigger_type')
+        execution_type = request.args.get('execution_type')
+
+        query = JobExecution.query.join(Job, JobExecution.job_id == Job.id)
+
+        if job_id:
+            query = query.filter(JobExecution.job_id == job_id)
+        if status:
+            query = query.filter(JobExecution.status == status)
+        if trigger_type:
+            query = query.filter(JobExecution.trigger_type == trigger_type)
+        if execution_type:
+            query = query.filter(JobExecution.execution_type == execution_type)
+
+        total = query.count()
+        total_pages = (total + limit - 1) // limit if total else 0
+
+        executions = (
+            query.order_by(desc(JobExecution.started_at))
+            .offset((page - 1) * limit)
+            .limit(limit)
+            .all()
+        )
+
+        payload = []
+        for execution in executions:
+            data = execution.to_dict()
+            data['job_name'] = execution.job.name if execution.job else None
+            data['github_repo'] = execution.job.github_repo if execution.job else None
+            payload.append(data)
+
+        return jsonify({
+            'executions': payload,
+            'total': total,
+            'page': page,
+            'limit': limit,
+            'total_pages': total_pages
+        }), 200
+    except Exception as e:
+        logger.error(f"Error listing executions: {str(e)}")
+        return jsonify({'error': ERROR_INTERNAL_SERVER, 'message': str(e)}), 500
+
+
+@jobs_bp.route('/executions/<execution_id>', methods=['GET'])
+@jwt_required()
+def get_execution(execution_id):
+    """Get a single execution by ID (All authenticated users)."""
+    try:
+        execution = JobExecution.query.join(Job, JobExecution.job_id == Job.id).filter(JobExecution.id == execution_id).first()
+        if not execution:
+            return jsonify({'error': 'Execution not found', 'message': f'No execution found with ID: {execution_id}'}), 404
+
+        data = execution.to_dict()
+        data['job_name'] = execution.job.name if execution.job else None
+        data['github_repo'] = execution.job.github_repo if execution.job else None
+
+        return jsonify({'execution': data}), 200
+    except Exception as e:
+        logger.error(f"Error retrieving execution {execution_id}: {str(e)}")
+        return jsonify({'error': ERROR_INTERNAL_SERVER, 'message': str(e)}), 500
+
+
+@jobs_bp.route('/executions/statistics', methods=['GET'])
+@jwt_required()
+def get_execution_statistics():
+    """
+    Execution summary stats across all jobs (or a single job via job_id).
+    """
+    try:
+        job_id = request.args.get('job_id')
+        base = JobExecution.query
+        if job_id:
+            base = base.filter(JobExecution.job_id == job_id)
+
+        total = base.count()
+        successful = base.filter(JobExecution.status == 'success').count()
+        failed = base.filter(JobExecution.status == 'failed').count()
+        running = base.filter(JobExecution.status == 'running').count()
+
+        avg_duration = base.with_entities(func.avg(JobExecution.duration_seconds)).scalar() or 0.0
+        success_rate = (successful / total * 100.0) if total else 0.0
+
+        return jsonify({
+            'total_executions': total,
+            'successful_executions': successful,
+            'failed_executions': failed,
+            'running_executions': running,
+            'success_rate': success_rate,
+            'average_duration_seconds': avg_duration,
+        }), 200
+    except Exception as e:
+        logger.error(f"Error getting execution statistics: {str(e)}")
+        return jsonify({'error': ERROR_INTERNAL_SERVER, 'message': str(e)}), 500
 
 
 @jobs_bp.route('/health', methods=['GET'])
