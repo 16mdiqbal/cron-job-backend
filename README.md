@@ -31,6 +31,9 @@ cron-job-backend/
 │   ├── __main__.py        # Module entry point (python -m src)
 │   ├── app.py             # Main Flask application (Factory pattern)
 │   ├── config.py          # Configuration settings
+│   ├── scripts/           # One-off maintenance scripts
+│   │   ├── __init__.py
+│   │   └── backfill_github_owner.py
 │   ├── models/
 │   │   ├── __init__.py    # Database initialization
 │   │   ├── user.py        # User model with authentication
@@ -47,6 +50,8 @@ cron-job-backend/
 │   └── scheduler/
 │       ├── __init__.py    # Scheduler initialization
 │       └── job_executor.py # Job execution functions
+│   └── instance/          # SQLite database directory (default)
+│       └── cron_jobs.db
 ├── test/                   # Test suite directory
 │   ├── conftest.py        # Pytest fixtures and configuration
 │   ├── test_auth/         # Authentication tests
@@ -58,8 +63,6 @@ cron-job-backend/
 │   │   └── test_delete_and_execute.py
 │   └── test_notifications/ # Notification feature tests
 │       └── test_email_toggle.py
-├── instance/              # Flask instance folder (runtime data)
-│   └── cron_jobs.db       # SQLite database (auto-generated)
 ├── venv/                  # Python virtual environment
 ├── create_admin.py        # Script to create initial admin user
 ├── requirements.txt       # Python dependencies
@@ -111,9 +114,11 @@ pip install -r requirements.txt
 - `JWT_SECRET_KEY` - JWT token signing key (defaults to SECRET_KEY)
 - `JWT_ACCESS_TOKEN_EXPIRES` - Access token expiration in seconds (default: 3600 = 1 hour)
 - `JWT_REFRESH_TOKEN_EXPIRES` - Refresh token expiration in seconds (default: 2592000 = 30 days)
-- `DATABASE_URL` - Database connection string (default: sqlite:///cron_jobs.db)
+- `DATABASE_URL` - Optional database connection string override (by default uses an absolute SQLite path at `src/instance/cron_jobs.db`)
 - `CORS_ORIGINS` - Comma-separated list of allowed origins (default: *)
 - `GITHUB_TOKEN` - GitHub personal access token (optional, for GitHub Actions)
+- `SCHEDULER_TIMEZONE` - Scheduler timezone (default: Asia/Tokyo)
+- `SCHEDULER_ENABLED` - Set to `false` to disable APScheduler startup (useful for scripts/tests)
 ### 3. Configure Environment Variables
 
 ```bash
@@ -190,7 +195,7 @@ See [TESTING_GUIDE.md](TESTING_GUIDE.md) for detailed testing documentation.
 ## Database Configuration
 
 ### SQLite (Development - Default)
-SQLite database is used by default and created automatically in `instance/cron_jobs.db`.
+SQLite database is used by default and created automatically in `src/instance/cron_jobs.db`.
 
 ### MySQL (Production)
 To use MySQL in production:
@@ -892,7 +897,7 @@ curl -i -X OPTIONS http://localhost:5001/api/jobs \
 ## Development Notes
 
 ### Database
-- **Storage:** `instance/cron_jobs.db` (SQLite)
+- **Storage:** `src/instance/cron_jobs.db` (SQLite, default)
 - **Schema:** Managed by SQLAlchemy ORM
 - **Migration:** Tables auto-created on first run
 - **Production:** Can switch to MySQL by changing `DATABASE_URL`
@@ -989,7 +994,7 @@ lsof -ti :5001 | xargs kill -9
 ### Database Locked
 ```bash
 # Remove lock file
-rm instance/cron_jobs.db-journal
+rm src/instance/cron_jobs.db-journal
 ```
 
 ### Scheduler Not Starting
@@ -1022,34 +1027,8 @@ rm instance/cron_jobs.db-journal
 
 ## Future Enhancements
 
-### Manual Trigger Endpoint
-- [ ] **POST /api/jobs/<job_id>/trigger** - Manual job execution
-  - **Purpose:** Allow immediate job execution outside of scheduled cron times
-  - **Flow:**
-    1. Fetch job details from database using job_id
-    2. Validate job exists and is_active=true
-    3. Decide execution destination based on job config:
-       - If GitHub Actions config present (owner, repo, workflow) → dispatch to GitHub Actions
-       - Else if target_url present → call webhook
-    4. Pass job metadata appropriately:
-       - GitHub Actions: metadata sent as workflow inputs
-       - Webhook: standard GET request to target_url
-    5. Execute using existing `trigger_job_manually()` function from scheduler/job_executor.py
-    6. Return execution status (200 OK) or error (404/400/500)
-  - **Implementation Details:**
-    - Add new route in [routes/jobs.py](routes/jobs.py)
-    - Reuse existing `trigger_job_manually(job_id, job_name, job_config)` function
-    - No scheduler involvement (direct execution)
-    - Validate job exists and is active before triggering
-  - **Validations:**
-    - Job ID must exist in database
-    - Job must have is_active=true
-    - Job must have valid target configuration
-  - **Use Cases:**
-    - Testing newly created jobs immediately
-    - Re-running failed job executions
-    - On-demand triggers from frontend UI
-    - Manual intervention for time-sensitive operations
+### Manual Execute Endpoint (Implemented)
+- [x] **POST /api/jobs/<job_id>/execute** - Manual job execution (optionally with runtime overrides; not persisted)
 
 ### Other Planned Features
 - [x] ~~Authentication & authorization~~ **COMPLETED**
@@ -1322,7 +1301,6 @@ Authorization: Bearer <access_token>
 - `status` (optional) - Filter by status: `success`, `failed`, `running`
 - `trigger_type` (optional) - Filter by trigger type: `scheduled`, `manual`
 - `limit` (optional) - Limit results (default: 50)
-- `offset` (optional) - Pagination offset (default: 0)
 
 **Response (200 OK):**
 ```json
@@ -1671,8 +1649,8 @@ No action is required. This is an informational notification.
 ## Development Notes
 
 ### Database
-- SQLite database stored in `instance/cron_jobs.db`
-- Two main tables: `users` and `jobs`
+- SQLite database stored in `src/instance/cron_jobs.db` (default)
+- Key tables: `users`, `jobs`, `job_executions`, `notifications`, `user_notification_preferences`
 - Jobs track ownership via `created_by` foreign key to users
 - All IDs are auto-generated UUIDs
 
