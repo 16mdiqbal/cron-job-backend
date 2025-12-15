@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from ..models import db, JobExecution
 from ..models.job import Job
 from ..utils.email import send_job_failure_notification, send_job_success_notification
+from ..utils.notifications import broadcast_job_success, broadcast_job_failure
 from flask import current_app
 
 logger = logging.getLogger(__name__)
@@ -47,7 +48,7 @@ def execute_job(job_id, job_name, job_config, trigger_type='scheduled'):
         
         # Priority 2: Generic webhook URL
         elif job_config.get('target_url'):
-            result = execute_webhook(job_name, job_config['target_url'], execution)
+            result = execute_webhook(job_id, job_name, job_config['target_url'], job_config, execution)
         
         else:
             error_msg = f"Job '{job_name}' has no valid target (neither GitHub Actions nor webhook URL)"
@@ -136,6 +137,13 @@ def execute_github_actions(job_name, job_config, execution):
             execution.mark_completed('success', response_status=204, output=f"Workflow triggered successfully on branch {ref}")
             db.session.commit()
             
+            # Broadcast success notification to all users
+            try:
+                broadcast_job_success(job_name, job_id, execution.id)
+                logger.info(f"Broadcast notification sent: Job '{job_name}' succeeded")
+            except Exception as e:
+                logger.error(f"Failed to broadcast success notification: {str(e)}")
+            
             # Send success notification only if enabled
             if job_config.get('enable_email_notifications') and job_config.get('notify_on_success'):
                 notification_emails = job_config.get('notification_emails', [])
@@ -150,6 +158,13 @@ def execute_github_actions(job_name, job_config, execution):
             logger.error(f"Job '{job_name}' - {error_msg}")
             execution.mark_completed('failed', response_status=response.status_code, error_message=error_msg)
             db.session.commit()
+            
+            # Broadcast failure notification to all users
+            try:
+                broadcast_job_failure(job_name, job_id, execution.id, error_msg)
+                logger.info(f"Broadcast notification sent: Job '{job_name}' failed")
+            except Exception as e:
+                logger.error(f"Failed to broadcast failure notification: {str(e)}")
             
             # Send failure notification only if enabled
             if job_config.get('enable_email_notifications'):
@@ -166,6 +181,15 @@ def execute_github_actions(job_name, job_config, execution):
         execution.mark_completed('failed', error_message=error_msg)
         db.session.commit()
         
+        # Get job owner for bell notification
+        job = Job.query.get(job_id)
+        if job:
+            try:
+                create_job_failure_notification(job.owner_id, job_name, job_id, execution.id, error_msg)
+                logger.info(f"Bell notification sent: Job '{job_name}' failed (exception)")
+            except Exception as e:
+                logger.error(f"Failed to create failure notification: {str(e)}")
+        
         # Send failure notification
         notification_emails = job_config.get('notification_emails', [])
         if notification_emails:
@@ -175,13 +199,15 @@ def execute_github_actions(job_name, job_config, execution):
                 logger.error(f"Failed to send failure notification: {str(send_error)}")
 
 
-def execute_webhook(job_name, target_url, execution):
+def execute_webhook(job_id, job_name, target_url, job_config, execution):
     """
     Call a generic webhook URL.
     
     Args:
+        job_id (str): The unique identifier of the job
         job_name (str): The name of the job
         target_url (str): The webhook URL to call
+        job_config (dict): Job configuration
         execution (JobExecution): The execution record to update
     """
     logger.info(f"Calling webhook: {target_url}")
@@ -202,6 +228,13 @@ def execute_webhook(job_name, target_url, execution):
             execution.mark_completed('success', response_status=response.status_code, output=output)
             db.session.commit()
             
+            # Broadcast success notification to all users
+            try:
+                broadcast_job_success(job_name, job_id, execution.id)
+                logger.info(f"Broadcast notification sent: Job '{job_name}' succeeded")
+            except Exception as e:
+                logger.error(f"Failed to broadcast success notification: {str(e)}")
+            
             # Send success notification only if enabled
             if job_config.get('enable_email_notifications') and job_config.get('notify_on_success'):
                 notification_emails = job_config.get('notification_emails', [])
@@ -218,6 +251,13 @@ def execute_webhook(job_name, target_url, execution):
                                    output=output)
             db.session.commit()
             
+            # Broadcast failure notification to all users
+            try:
+                broadcast_job_failure(job_name, job_id, execution.id, error_msg)
+                logger.info(f"Broadcast notification sent: Job '{job_name}' failed")
+            except Exception as e:
+                logger.error(f"Failed to broadcast failure notification: {str(e)}")
+            
             # Send failure notification only if enabled
             if job_config.get('enable_email_notifications'):
                 notification_emails = job_config.get('notification_emails', [])
@@ -232,6 +272,13 @@ def execute_webhook(job_name, target_url, execution):
         logger.error(f"Job '{job_name}' - {error_msg}")
         execution.mark_completed('failed', error_message=error_msg)
         db.session.commit()
+        
+        # Broadcast failure notification to all users
+        try:
+            broadcast_job_failure(job_name, job_id, execution.id, error_msg)
+            logger.info(f"Broadcast notification sent: Job '{job_name}' failed (exception)")
+        except Exception as e:
+            logger.error(f"Failed to broadcast failure notification: {str(e)}")
         
         # Send failure notification only if enabled
         if job_config.get('enable_email_notifications'):

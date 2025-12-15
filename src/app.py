@@ -13,6 +13,7 @@ from .scheduler import scheduler
 from .scheduler.job_executor import execute_job
 from .routes.jobs import jobs_bp
 from .routes.auth import auth_bp
+from .routes.notifications import notifications_bp
 from .models.user import User
 
 # Configure logging
@@ -123,6 +124,7 @@ def create_app():
     # Register Blueprints
     app.register_blueprint(auth_bp)
     app.register_blueprint(jobs_bp)
+    app.register_blueprint(notifications_bp)
 
     return app
 

@@ -10,6 +10,13 @@ from ..models.job_execution import JobExecution
 from ..scheduler import scheduler
 from ..scheduler.job_executor import execute_job
 from ..utils.auth import role_required, get_current_user, can_modify_job, is_admin
+from ..utils.notifications import (
+    broadcast_job_created,
+    broadcast_job_updated,
+    broadcast_job_deleted,
+    broadcast_job_enabled,
+    broadcast_job_disabled
+)
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +158,15 @@ def create_job():
                 replace_existing=True
             )
             logger.info(f"Job '{new_job.name}' (ID: {new_job.id}) created and scheduled successfully")
+            
+            # Broadcast notification to all users
+            current_user = get_current_user()
+            try:
+                broadcast_job_created(new_job.name, new_job.id, current_user.email)
+                logger.info(f"Broadcast notification sent: Job '{new_job.name}' created")
+            except Exception as e:
+                logger.error(f"Failed to broadcast job created notification: {str(e)}")
+                
         except Exception as e:
             # Rollback database if scheduler fails
             db.session.delete(new_job)
@@ -370,12 +386,18 @@ def update_job(job_id):
             job.notify_on_success = bool(data['notify_on_success']) if job.enable_email_notifications else False
             needs_scheduler_update = True
         
+        # Track if status changed for notification logic
+        status_changed = False
+        old_status = None
+        
         # Update is_active if provided
         if 'is_active' in data:
             new_status = bool(data['is_active'])
             if new_status != job.is_active:
+                old_status = job.is_active
                 job.is_active = new_status
                 needs_scheduler_update = True
+                status_changed = True
         
         # Validate at least one target exists
         if not job.target_url and not (job.github_owner and job.github_repo and job.github_workflow_name):
@@ -422,6 +444,29 @@ def update_job(job_id):
                     'error': 'Failed to update scheduler',
                     'message': str(e)
                 }), 500
+        
+        # Broadcast notification to all users about job update
+        # Send appropriate notification based on what changed
+        current_user = get_current_user()
+        user_email = current_user.email if current_user else 'Unknown'
+        
+        try:
+            if status_changed:
+                # Status changed - send enabled/disabled notification
+                if old_status and not job.is_active:
+                    broadcast_job_disabled(job.name, job.id, user_email)
+                    logger.info(f"Broadcast notification sent: Job '{job.name}' disabled")
+                elif not old_status and job.is_active:
+                    broadcast_job_enabled(job.name, job.id, user_email)
+                    logger.info(f"Broadcast notification sent: Job '{job.name}' enabled")
+            else:
+                # Generic update notification
+                broadcast_job_updated(job.name, job.id, user_email)
+                logger.info(f"Broadcast notification sent: Job '{job.name}' updated")
+        except Exception as e:
+            logger.error(f"Failed to broadcast job notification: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
         
         return jsonify({
             'message': 'Job updated successfully',
@@ -492,6 +537,14 @@ def delete_job(job_id):
         db.session.commit()
         
         logger.info(f"Job '{job_name}' (ID: {job_id}) deleted successfully")
+        
+        # Broadcast notification to all users
+        current_user = get_current_user()
+        try:
+            broadcast_job_deleted(job_name, current_user.email)
+            logger.info(f"Broadcast notification sent: Job '{job_name}' deleted")
+        except Exception as e:
+            logger.error(f"Failed to broadcast job deleted notification: {str(e)}")
         
         return jsonify({
             'message': 'Job deleted successfully',
