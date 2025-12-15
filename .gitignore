@@ -55,3 +55,7 @@ instance/cron_jobs.db
 # OS
 .DS_Store
 Thumbs.db
+
+# Local utility / logs (not part of app)
+seed_jobs.py
+vite.log
