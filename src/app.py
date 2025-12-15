@@ -5,14 +5,15 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from datetime import timedelta
 from apscheduler.triggers.cron import CronTrigger
-from config import Config
-from models import db
-from models.job import Job
-from utils.email import mail
-from scheduler import scheduler
-from scheduler.job_executor import execute_job
-from routes.jobs import jobs_bp
-from routes.auth import auth_bp
+from .config import Config
+from .models import db
+from .models.job import Job
+from .utils.email import mail
+from .scheduler import scheduler
+from .scheduler.job_executor import execute_job
+from .routes.jobs import jobs_bp
+from .routes.auth import auth_bp
+from .models.user import User
 
 # Configure logging
 logging.basicConfig(
@@ -52,10 +53,29 @@ def create_app():
     # Initialize Flask-Mail
     mail.init_app(app)
 
-    # Create database tables
+    # Create database tables and initialize default admin user
     with app.app_context():
         db.create_all()
         logger.info("Database tables created successfully")
+        
+        # Create default admin user if it doesn't exist
+        admin = User.query.filter_by(username='admin').first()
+        if not admin:
+            try:
+                admin = User(
+                    username='admin',
+                    email='admin@example.com',
+                    role='admin',
+                    is_active=True
+                )
+                admin.set_password('admin123')
+                db.session.add(admin)
+                db.session.commit()
+                logger.info("✅ Default admin user created successfully")
+                logger.warning("⚠️  Default admin password is 'admin123'. Change it immediately!")
+            except Exception as e:
+                logger.error(f"Error creating default admin user: {str(e)}")
+                db.session.rollback()
 
     # Configure and start APScheduler (unless disabled for testing)
     scheduler_enabled = os.getenv('SCHEDULER_ENABLED', 'true').lower() != 'false'

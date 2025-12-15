@@ -1,9 +1,9 @@
 import logging
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
-from models import db
-from models.user import User
-from utils.auth import role_required
+from ..models import db
+from ..models.user import User
+from ..utils.auth import role_required
 
 logger = logging.getLogger(__name__)
 
@@ -110,9 +110,16 @@ def login():
     """
     Login and receive JWT tokens.
     
-    Expected JSON payload:
+    Supports login with either username or email.
+    
+    Expected JSON payload (choose one):
     {
         "username": "john_doe",
+        "password": "secure_password"
+    }
+    OR
+    {
+        "email": "john@example.com",
         "password": "secure_password"
     }
     
@@ -129,28 +136,32 @@ def login():
         data = request.get_json()
         
         # Validate required fields
-        if not data.get('username') or not data.get('password'):
-            return jsonify({'error': 'Username and password are required'}), 400
+        username_or_email = data.get('username') or data.get('email')
+        password = data.get('password')
         
-        username = data['username'].strip()
-        password = data['password']
+        if not username_or_email or not password:
+            return jsonify({'error': 'Email/Username and password are required'}), 400
         
-        # Find user
-        user = User.query.filter_by(username=username).first()
+        username_or_email = username_or_email.strip()
+        
+        # Find user by username OR email
+        user = User.query.filter(
+            (User.username == username_or_email) | (User.email == username_or_email)
+        ).first()
         
         if not user:
-            logger.warning(f"Login attempt with non-existent username: {username}")
-            return jsonify({'error': 'Invalid username or password'}), 401
+            logger.warning(f"Login attempt with non-existent username/email: {username_or_email}")
+            return jsonify({'error': 'Invalid email/username or password'}), 401
         
         # Check if user is active
         if not user.is_active:
-            logger.warning(f"Login attempt for inactive user: {username}")
+            logger.warning(f"Login attempt for inactive user: {user.username}")
             return jsonify({'error': 'Account is inactive. Contact administrator.'}), 401
         
         # Verify password
         if not user.check_password(password):
-            logger.warning(f"Failed login attempt for user: {username}")
-            return jsonify({'error': 'Invalid username or password'}), 401
+            logger.warning(f"Failed login attempt for user: {user.username}")
+            return jsonify({'error': 'Invalid email/username or password'}), 401
         
         # Create tokens with user claims
         additional_claims = {
@@ -168,7 +179,7 @@ def login():
             additional_claims=additional_claims
         )
         
-        logger.info(f"User logged in successfully: {username}")
+        logger.info(f"User logged in successfully: {user.username}")
         
         return jsonify({
             'message': 'Login successful',

@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from passlib.hash import pbkdf2_sha256
-from models import db
+from . import db
 
 
 class User(db.Model):
