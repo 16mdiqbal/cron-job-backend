@@ -4,6 +4,11 @@ from dotenv import load_dotenv
 # Load environment variables from .env file
 load_dotenv()
 
+# Get the absolute path to the project root directory
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+# Database will be stored in src/instance/cron_jobs.db
+DB_PATH = os.path.join(BASE_DIR, 'src', 'instance', 'cron_jobs.db')
+
 
 class Config:
     """
@@ -22,8 +27,8 @@ class Config:
     # CORS Configuration
     CORS_ORIGINS = os.getenv('CORS_ORIGINS', '*').split(',')
 
-    # Database Configuration
-    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', 'sqlite:///cron_jobs.db')
+    # Database Configuration - Using absolute path to prevent multiple database files
+    SQLALCHEMY_DATABASE_URI = os.getenv('DATABASE_URL', f'sqlite:///{DB_PATH}')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     # APScheduler Configuration

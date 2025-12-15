@@ -36,6 +36,11 @@ instance/
 *.db
 *.sqlite
 *.sqlite3
+# Keep only the main database, ignore any stray database files
+cron_jobs.db
+instance/cron_jobs.db
+# Keep backups out of git
+*.db.backup*
 
 # Environment variables
 .env
