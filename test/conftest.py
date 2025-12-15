@@ -6,13 +6,13 @@ import sys
 import pytest
 from datetime import timedelta
 
-# Add src directory to path to import app modules
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'src')))
+# Add parent directory to path to import src modules
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from app import create_app
-from models import db
-from models.user import User
-from models.job import Job
+from src.app import create_app
+from src.models import db
+from src.models.user import User
+from src.models.job import Job
 
 
 @pytest.fixture(scope='function')

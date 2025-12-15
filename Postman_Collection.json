@@ -1,0 +1,1897 @@
+{
+  "info": {
+    "name": "Cron Job Backend API",
+    "description": "Complete API collection for Cron Job Backend with all endpoints and edge cases",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Authentication",
+      "description": "User authentication and management endpoints",
+      "item": [
+        {
+          "name": "Login - Valid Credentials",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/login",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Login with valid username and password to get access and refresh tokens"
+          },
+          "response": []
+        },
+        {
+          "name": "Login - Missing Username",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"admin123\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/login",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Edge case: Login without username - should return 400 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Login - Missing Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/login",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Edge case: Login without password - should return 400 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Login - Invalid Credentials",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"wrongpassword\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/login",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Edge case: Login with incorrect password - should return 401 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Login - Non-existent User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"nonexistent_user\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/login",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Edge case: Login with non-existent username - should return 401 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Register - Admin User (Valid)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"newuser\",\n  \"email\": \"newuser@example.com\",\n  \"password\": \"securepassword123\",\n  \"role\": \"user\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/register",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Register a new user (Admin only). Admin must be authenticated."
+          },
+          "response": []
+        },
+        {
+          "name": "Register - Missing Username",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/register",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Edge case: Register without username - should return 400 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Register - Duplicate Username",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"email\": \"anotheradmin@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/register",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Edge case: Register with already existing username - should return 409 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Register - Duplicate Email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"anotheruser\",\n  \"email\": \"admin@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/register",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Edge case: Register with already existing email - should return 409 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Register - Short Username",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"ab\",\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/register",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Edge case: Register with username less than 3 characters - should return 400 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Register - Short Password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"newuser\",\n  \"email\": \"user@example.com\",\n  \"password\": \"12345\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/register",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Edge case: Register with password less than 6 characters - should return 400 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Register - Invalid Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"newuser\",\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"role\": \"superadmin\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/register",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Edge case: Register with invalid role - should return 400 error. Valid roles: admin, user, viewer"
+          },
+          "response": []
+        },
+        {
+          "name": "Register - Non-admin User Registering",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"newuser\",\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/register",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Edge case: Non-admin user trying to register - should return 403 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token - Valid",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{REFRESH_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/refresh",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Refresh the access token using a valid refresh token"
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token - Invalid Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer invalid_token_here"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/refresh",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Edge case: Try to refresh with invalid token - should return 401 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/me",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Get the current authenticated user's information"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Current User - No Token",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/me",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Edge case: Get current user without authentication - should return 401 error"
+          },
+          "response": []
+        },
+        {
+          "name": "List All Users (Admin Only)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/users",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "users"
+              ]
+            },
+            "description": "List all users - Admin only endpoint"
+          },
+          "response": []
+        },
+        {
+          "name": "List All Users - Non-Admin",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/users",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "users"
+              ]
+            },
+            "description": "Edge case: Non-admin trying to list all users - should return 403 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Get User by ID - Own Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/users/{{USER_ID}}",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "users",
+                "{{USER_ID}}"
+              ]
+            },
+            "description": "Get user profile by ID - Users can view their own profile"
+          },
+          "response": []
+        },
+        {
+          "name": "Get User by ID - Another User Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/users/2",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "users",
+                "2"
+              ]
+            },
+            "description": "Edge case: Non-admin trying to view another user's profile - should return 403 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Get User by ID - Non-existent User",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/users/999999",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "users",
+                "999999"
+              ]
+            },
+            "description": "Edge case: Get a non-existent user - should return 404 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Update User - Own Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"newemail@example.com\",\n  \"password\": \"newpassword123\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/users/{{USER_ID}}",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "users",
+                "{{USER_ID}}"
+              ]
+            },
+            "description": "Update user's own profile - can update email and password"
+          },
+          "response": []
+        },
+        {
+          "name": "Update User - Another User's Profile",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"someoneelse@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/users/2",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "users",
+                "2"
+              ]
+            },
+            "description": "Edge case: Non-admin trying to update another user's profile - should return 403 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Update User - Admin Updating Another User",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"admin\",\n  \"is_active\": false\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/users/2",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "users",
+                "2"
+              ]
+            },
+            "description": "Admin updating another user's role and active status"
+          },
+          "response": []
+        },
+        {
+          "name": "Update User - Duplicate Email",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@example.com\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/users/{{USER_ID}}",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "users",
+                "{{USER_ID}}"
+              ]
+            },
+            "description": "Edge case: Update with already existing email - should return 409 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Update User - Short Password",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"12345\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/users/{{USER_ID}}",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "users",
+                "{{USER_ID}}"
+              ]
+            },
+            "description": "Edge case: Update with password less than 6 characters - should return 400 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User (Admin Only)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/users/3",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "users",
+                "3"
+              ]
+            },
+            "description": "Delete a user - Admin only endpoint"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User - Self Deletion",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/users/{{USER_ID}}",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "users",
+                "{{USER_ID}}"
+              ]
+            },
+            "description": "Edge case: Admin trying to delete their own account - should return 400 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User - Non-Admin",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/auth/users/2",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "users",
+                "2"
+              ]
+            },
+            "description": "Edge case: Non-admin trying to delete user - should return 403 error"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Jobs Management",
+      "description": "Job creation, management, and execution endpoints",
+      "item": [
+        {
+          "name": "Create Job - Valid (Webhook URL)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Daily Report\",\n  \"cron_expression\": \"0 9 * * *\",\n  \"target_url\": \"https://webhook.site/unique-id\",\n  \"metadata\": {\n    \"report_type\": \"daily\",\n    \"recipient\": \"admin@example.com\"\n  },\n  \"enable_email_notifications\": true,\n  \"notification_emails\": [\"admin@example.com\"],\n  \"notify_on_success\": true\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ]
+            },
+            "description": "Create a new job with webhook URL target. Can specify metadata and email notifications."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Job - Valid (GitHub Actions)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"GitHub CI Pipeline\",\n  \"cron_expression\": \"*/30 * * * *\",\n  \"github_owner\": \"myorganization\",\n  \"github_repo\": \"my-repo\",\n  \"github_workflow_name\": \"CI\",\n  \"enable_email_notifications\": false\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ]
+            },
+            "description": "Create a job that triggers GitHub Actions workflow"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Job - Missing Name",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cron_expression\": \"0 9 * * *\",\n  \"target_url\": \"https://webhook.site/unique-id\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ]
+            },
+            "description": "Edge case: Create job without name - should return 400 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Job - Missing Cron Expression",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Job\",\n  \"target_url\": \"https://webhook.site/unique-id\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ]
+            },
+            "description": "Edge case: Create job without cron_expression - should return 400 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Job - Invalid Cron Expression",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Invalid Job\",\n  \"cron_expression\": \"invalid cron\",\n  \"target_url\": \"https://webhook.site/unique-id\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ]
+            },
+            "description": "Edge case: Create job with invalid cron expression - should return 400 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Job - Duplicate Name",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Daily Report\",\n  \"cron_expression\": \"0 10 * * *\",\n  \"target_url\": \"https://webhook.site/another-id\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ]
+            },
+            "description": "Edge case: Create job with duplicate name - should return 400 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Job - No Target (Missing URL & GitHub)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"No Target Job\",\n  \"cron_expression\": \"0 9 * * *\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ]
+            },
+            "description": "Edge case: Create job without target URL or GitHub config - should return 400 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Job - Viewer Role",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Job\",\n  \"cron_expression\": \"0 9 * * *\",\n  \"target_url\": \"https://webhook.site/unique-id\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ]
+            },
+            "description": "Edge case: Viewer role trying to create job - should return 403 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Create Job - No Authentication",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Job\",\n  \"cron_expression\": \"0 9 * * *\",\n  \"target_url\": \"https://webhook.site/unique-id\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ]
+            },
+            "description": "Edge case: Create job without authentication - should return 401 error"
+          },
+          "response": []
+        },
+        {
+          "name": "List All Jobs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ]
+            },
+            "description": "List all jobs - All authenticated users can view jobs"
+          },
+          "response": []
+        },
+        {
+          "name": "List All Jobs - No Authentication",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs"
+              ]
+            },
+            "description": "Edge case: List jobs without authentication - should return 401 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Job by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs/1",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "1"
+              ]
+            },
+            "description": "Get details of a specific job by ID"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Job by ID - Non-existent",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs/999999",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "999999"
+              ]
+            },
+            "description": "Edge case: Get non-existent job - should return 404 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Job - Valid",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Job Name\",\n  \"cron_expression\": \"0 10 * * *\",\n  \"target_url\": \"https://webhook.site/updated-id\",\n  \"is_active\": true\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs/1",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "1"
+              ]
+            },
+            "description": "Update job details - Owner or Admin can update"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Job - Invalid Cron",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"cron_expression\": \"not a valid cron\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs/1",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "1"
+              ]
+            },
+            "description": "Edge case: Update job with invalid cron expression - should return 400 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Job - Duplicate Name",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Daily Report\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs/2",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "2"
+              ]
+            },
+            "description": "Edge case: Update job with already existing name - should return 400 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Job - Remove All Targets",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"target_url\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs/1",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "1"
+              ]
+            },
+            "description": "Edge case: Remove all targets from job - should return 400 error (job must have at least one target)"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Job - Non-owner (User)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Hacked Name\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs/3",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "3"
+              ]
+            },
+            "description": "Edge case: Non-owner user trying to update another user's job - should return 403 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Update Job - Non-existent",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Name\"\n}"
+            },
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs/999999",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "999999"
+              ]
+            },
+            "description": "Edge case: Update non-existent job - should return 404 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Job",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs/1",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "1"
+              ]
+            },
+            "description": "Delete a job - Owner or Admin can delete"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Job - Non-owner (User)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs/2",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "2"
+              ]
+            },
+            "description": "Edge case: Non-owner user trying to delete another user's job - should return 403 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Job - Non-existent",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs/999999",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "999999"
+              ]
+            },
+            "description": "Edge case: Delete non-existent job - should return 404 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Job Executions - All",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs/1/executions?limit=50",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "1",
+                "executions"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            },
+            "description": "Get execution history for a job with limit parameter"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Job Executions - Filter by Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs/1/executions?status=success&limit=20",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "1",
+                "executions"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "success"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Get job executions filtered by status (success, failed, running)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Job Executions - Filter by Type",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs/1/executions?trigger_type=scheduled&limit=30",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "1",
+                "executions"
+              ],
+              "query": [
+                {
+                  "key": "trigger_type",
+                  "value": "scheduled"
+                },
+                {
+                  "key": "limit",
+                  "value": "30"
+                }
+              ]
+            },
+            "description": "Get job executions filtered by trigger type (scheduled, manual)"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Job Executions - Non-existent Job",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs/999999/executions",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "999999",
+                "executions"
+              ]
+            },
+            "description": "Edge case: Get executions for non-existent job - should return 404 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Specific Execution Details",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs/1/executions/exec_id_here",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "1",
+                "executions",
+                "exec_id_here"
+              ]
+            },
+            "description": "Get detailed information about a specific job execution"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Execution Details - Non-existent Execution",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs/1/executions/nonexistent_exec_id",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "1",
+                "executions",
+                "nonexistent_exec_id"
+              ]
+            },
+            "description": "Edge case: Get details of non-existent execution - should return 404 error"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Job Execution Statistics",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs/1/executions/stats",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "1",
+                "executions",
+                "stats"
+              ]
+            },
+            "description": "Get execution statistics for a job including success rate and average duration"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Execution Stats - Non-existent Job",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{ACCESS_TOKEN}}"
+              }
+            ],
+            "url": {
+              "raw": "{{BASE_URL}}/api/jobs/999999/executions/stats",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "jobs",
+                "999999",
+                "executions",
+                "stats"
+              ]
+            },
+            "description": "Edge case: Get stats for non-existent job - should return 404 error"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Health & System",
+      "description": "Health check and system status endpoints",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{BASE_URL}}/api/health",
+              "protocol": "http",
+              "host": [
+                "{{BASE_URL}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            },
+            "description": "Check if the API is running and get scheduler status"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "BASE_URL",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "ACCESS_TOKEN",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "REFRESH_TOKEN",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "USER_ID",
+      "value": "1",
+      "type": "string"
+    }
+  ]
+}

@@ -5,6 +5,14 @@ echo "Stopping any existing Flask server..."
 pkill -f "python -m src.app" 2>/dev/null || true
 sleep 1
 
+# Clean up old database instances from different locations to avoid confusion
+echo "Cleaning up old database files from root directory..."
+rm -f /Users/mohammadiqbal/Documents/Workspace/cron-job-backend/cron_jobs.db 2>/dev/null || true
+rm -f /Users/mohammadiqbal/Documents/Workspace/cron-job-backend/instance/cron_jobs.db 2>/dev/null || true
+
+# Ensure the correct database directory exists
+mkdir -p /Users/mohammadiqbal/Documents/Workspace/cron-job-backend/src/instance
+
 # Start the server
 echo "Starting Flask server..."
 cd /Users/mohammadiqbal/Documents/Workspace/cron-job-backend
@@ -19,6 +27,10 @@ sleep 3
 # Test if server is running
 if curl -s http://localhost:5001/api/health > /dev/null 2>&1; then
     echo "✓ Server is running successfully on http://localhost:5001"
+    echo ""
+    echo "Default credentials:"
+    echo "  Username: admin"
+    echo "  Password: admin123"
     echo ""
     echo "To stop the server later, run: kill $SERVER_PID"
 else

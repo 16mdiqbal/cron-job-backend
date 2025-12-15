@@ -5,8 +5,8 @@ import logging
 from functools import wraps
 from flask import jsonify
 from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity, get_jwt
-from models import db
-from models.user import User
+from ..models import db
+from ..models.user import User
 
 logger = logging.getLogger(__name__)
 

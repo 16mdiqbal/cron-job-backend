@@ -4,12 +4,12 @@ from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 from croniter import croniter
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import desc
-from models import db
-from models.job import Job
-from models.job_execution import JobExecution
-from scheduler import scheduler
-from scheduler.job_executor import execute_job
-from utils.auth import role_required, get_current_user, can_modify_job, is_admin
+from ..models import db
+from ..models.job import Job
+from ..models.job_execution import JobExecution
+from ..scheduler import scheduler
+from ..scheduler.job_executor import execute_job
+from ..utils.auth import role_required, get_current_user, can_modify_job, is_admin
 
 logger = logging.getLogger(__name__)
 

@@ -1,7 +1,7 @@
 import uuid
 import json
 from datetime import datetime, timezone
-from models import db
+from . import db
 
 
 class Job(db.Model):

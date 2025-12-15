@@ -2,9 +2,9 @@ import logging
 import requests
 import os
 from datetime import datetime, timezone
-from models import db, JobExecution
-from models.job import Job
-from utils.email import send_job_failure_notification, send_job_success_notification
+from ..models import db, JobExecution
+from ..models.job import Job
+from ..utils.email import send_job_failure_notification, send_job_success_notification
 from flask import current_app
 
 logger = logging.getLogger(__name__)
