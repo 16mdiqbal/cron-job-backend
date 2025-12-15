@@ -68,5 +68,19 @@ class JobExecution(db.Model):
         
         # Calculate duration
         if self.started_at and self.completed_at:
-            duration = self.completed_at - self.started_at
+            started_at = self.started_at
+            completed_at = self.completed_at
+
+            # SQLite doesn't preserve tzinfo; normalize to UTC-aware before subtracting.
+            if started_at.tzinfo is None:
+                started_at = started_at.replace(tzinfo=timezone.utc)
+            else:
+                started_at = started_at.astimezone(timezone.utc)
+
+            if completed_at.tzinfo is None:
+                completed_at = completed_at.replace(tzinfo=timezone.utc)
+            else:
+                completed_at = completed_at.astimezone(timezone.utc)
+
+            duration = completed_at - started_at
             self.duration_seconds = duration.total_seconds()

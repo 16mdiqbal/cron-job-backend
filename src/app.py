@@ -11,7 +11,7 @@ from .models import db
 from .models.job import Job
 from .utils.email import mail
 from .scheduler import scheduler
-from .scheduler.job_executor import execute_job
+from .scheduler.job_executor import execute_job, execute_job_with_app_context, set_flask_app
 from .routes.jobs import jobs_bp
 from .routes.auth import auth_bp
 from .routes.notifications import notifications_bp
@@ -40,6 +40,7 @@ def create_app():
     """
     app = Flask(__name__)
     app.config.from_object(Config)
+    set_flask_app(app)
 
     # Initialize CORS
     CORS(app, resources={
@@ -117,7 +118,7 @@ def create_app():
                         'notify_on_success': job.notify_on_success
                     }
                     scheduler.add_job(
-                        func=execute_job,
+                        func=execute_job_with_app_context,
                         trigger=trigger,
                         args=[job.id, job.name, job_config],
                         id=job.id,
