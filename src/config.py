@@ -33,7 +33,9 @@ class Config:
 
     # APScheduler Configuration
     SCHEDULER_API_ENABLED = True
-    SCHEDULER_TIMEZONE = 'UTC'
+    # Cron expressions in the UI/CSV are specified in JST by convention.
+    # You can override this via env var if needed.
+    SCHEDULER_TIMEZONE = os.getenv('SCHEDULER_TIMEZONE', 'Asia/Tokyo')
     
     # APScheduler Job Store Configuration
     SCHEDULER_JOBSTORES = {
