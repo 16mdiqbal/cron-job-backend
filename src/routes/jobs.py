@@ -10,6 +10,7 @@ from ..models.job_execution import JobExecution
 from ..scheduler import scheduler
 from ..scheduler.job_executor import execute_job
 from ..utils.auth import role_required, get_current_user, can_modify_job, is_admin
+from ..utils.notifications import create_job_disabled_notification
 
 logger = logging.getLogger(__name__)
 
@@ -374,8 +375,17 @@ def update_job(job_id):
         if 'is_active' in data:
             new_status = bool(data['is_active'])
             if new_status != job.is_active:
+                old_status = job.is_active
                 job.is_active = new_status
                 needs_scheduler_update = True
+                
+                # Send notification when job is disabled
+                if old_status and not new_status:
+                    try:
+                        create_job_disabled_notification(job.owner_id, job.name, job.id)
+                        logger.info(f"Notification sent: Job '{job.name}' disabled")
+                    except Exception as e:
+                        logger.error(f"Failed to create disabled notification: {str(e)}")
         
         # Validate at least one target exists
         if not job.target_url and not (job.github_owner and job.github_repo and job.github_workflow_name):
