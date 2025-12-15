@@ -10,7 +10,13 @@ from ..models.job_execution import JobExecution
 from ..scheduler import scheduler
 from ..scheduler.job_executor import execute_job
 from ..utils.auth import role_required, get_current_user, can_modify_job, is_admin
-from ..utils.notifications import create_job_disabled_notification
+from ..utils.notifications import (
+    broadcast_job_created,
+    broadcast_job_updated,
+    broadcast_job_deleted,
+    broadcast_job_enabled,
+    broadcast_job_disabled
+)
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +158,15 @@ def create_job():
                 replace_existing=True
             )
             logger.info(f"Job '{new_job.name}' (ID: {new_job.id}) created and scheduled successfully")
+            
+            # Broadcast notification to all users
+            current_user = get_current_user()
+            try:
+                broadcast_job_created(new_job.name, new_job.id, current_user.email)
+                logger.info(f"Broadcast notification sent: Job '{new_job.name}' created")
+            except Exception as e:
+                logger.error(f"Failed to broadcast job created notification: {str(e)}")
+                
         except Exception as e:
             # Rollback database if scheduler fails
             db.session.delete(new_job)
@@ -379,13 +394,17 @@ def update_job(job_id):
                 job.is_active = new_status
                 needs_scheduler_update = True
                 
-                # Send notification when job is disabled
-                if old_status and not new_status:
-                    try:
-                        create_job_disabled_notification(job.owner_id, job.name, job.id)
-                        logger.info(f"Notification sent: Job '{job.name}' disabled")
-                    except Exception as e:
-                        logger.error(f"Failed to create disabled notification: {str(e)}")
+                # Broadcast notification when job is enabled/disabled
+                current_user = get_current_user()
+                try:
+                    if old_status and not new_status:
+                        broadcast_job_disabled(job.name, job.id, current_user.email)
+                        logger.info(f"Broadcast notification sent: Job '{job.name}' disabled")
+                    elif not old_status and new_status:
+                        broadcast_job_enabled(job.name, job.id, current_user.email)
+                        logger.info(f"Broadcast notification sent: Job '{job.name}' enabled")
+                except Exception as e:
+                    logger.error(f"Failed to broadcast job status notification: {str(e)}")
         
         # Validate at least one target exists
         if not job.target_url and not (job.github_owner and job.github_repo and job.github_workflow_name):
@@ -432,6 +451,14 @@ def update_job(job_id):
                     'error': 'Failed to update scheduler',
                     'message': str(e)
                 }), 500
+        
+        # Broadcast notification to all users about job update
+        current_user = get_current_user()
+        try:
+            broadcast_job_updated(job.name, job.id, current_user.email)
+            logger.info(f"Broadcast notification sent: Job '{job.name}' updated")
+        except Exception as e:
+            logger.error(f"Failed to broadcast job updated notification: {str(e)}")
         
         return jsonify({
             'message': 'Job updated successfully',
@@ -502,6 +529,14 @@ def delete_job(job_id):
         db.session.commit()
         
         logger.info(f"Job '{job_name}' (ID: {job_id}) deleted successfully")
+        
+        # Broadcast notification to all users
+        current_user = get_current_user()
+        try:
+            broadcast_job_deleted(job_name, current_user.email)
+            logger.info(f"Broadcast notification sent: Job '{job_name}' deleted")
+        except Exception as e:
+            logger.error(f"Failed to broadcast job deleted notification: {str(e)}")
         
         return jsonify({
             'message': 'Job deleted successfully',
