@@ -7,3 +7,4 @@ from .user import User
 from .job import Job
 from .job_execution import JobExecution
 from .notification_preferences import UserNotificationPreferences
+from .notification import Notification
