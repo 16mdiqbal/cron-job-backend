@@ -386,6 +386,10 @@ def update_job(job_id):
             job.notify_on_success = bool(data['notify_on_success']) if job.enable_email_notifications else False
             needs_scheduler_update = True
         
+        # Track if status changed for notification logic
+        status_changed = False
+        old_status = None
+        
         # Update is_active if provided
         if 'is_active' in data:
             new_status = bool(data['is_active'])
@@ -393,18 +397,7 @@ def update_job(job_id):
                 old_status = job.is_active
                 job.is_active = new_status
                 needs_scheduler_update = True
-                
-                # Broadcast notification when job is enabled/disabled
-                current_user = get_current_user()
-                try:
-                    if old_status and not new_status:
-                        broadcast_job_disabled(job.name, job.id, current_user.email)
-                        logger.info(f"Broadcast notification sent: Job '{job.name}' disabled")
-                    elif not old_status and new_status:
-                        broadcast_job_enabled(job.name, job.id, current_user.email)
-                        logger.info(f"Broadcast notification sent: Job '{job.name}' enabled")
-                except Exception as e:
-                    logger.error(f"Failed to broadcast job status notification: {str(e)}")
+                status_changed = True
         
         # Validate at least one target exists
         if not job.target_url and not (job.github_owner and job.github_repo and job.github_workflow_name):
@@ -453,12 +446,27 @@ def update_job(job_id):
                 }), 500
         
         # Broadcast notification to all users about job update
+        # Send appropriate notification based on what changed
         current_user = get_current_user()
+        user_email = current_user.email if current_user else 'Unknown'
+        
         try:
-            broadcast_job_updated(job.name, job.id, current_user.email)
-            logger.info(f"Broadcast notification sent: Job '{job.name}' updated")
+            if status_changed:
+                # Status changed - send enabled/disabled notification
+                if old_status and not job.is_active:
+                    broadcast_job_disabled(job.name, job.id, user_email)
+                    logger.info(f"Broadcast notification sent: Job '{job.name}' disabled")
+                elif not old_status and job.is_active:
+                    broadcast_job_enabled(job.name, job.id, user_email)
+                    logger.info(f"Broadcast notification sent: Job '{job.name}' enabled")
+            else:
+                # Generic update notification
+                broadcast_job_updated(job.name, job.id, user_email)
+                logger.info(f"Broadcast notification sent: Job '{job.name}' updated")
         except Exception as e:
-            logger.error(f"Failed to broadcast job updated notification: {str(e)}")
+            logger.error(f"Failed to broadcast job notification: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
         
         return jsonify({
             'message': 'Job updated successfully',

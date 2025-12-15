@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy import String
 from . import db
@@ -28,8 +28,8 @@ class Notification(db.Model):
     is_read = db.Column(db.Boolean, default=False, nullable=False)
     read_at = db.Column(db.DateTime, nullable=True)
     
-    # Timestamps
-    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    # Timestamps - Store in UTC with timezone awareness
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     
     # Relationships
     user = db.relationship('User', backref=db.backref('notifications', lazy='dynamic', cascade='all, delete-orphan'))
@@ -41,6 +41,24 @@ class Notification(db.Model):
 
     def to_dict(self):
         """Convert notification to dictionary for JSON serialization."""
+        # Ensure datetimes have timezone info (assume UTC if naive)
+        created_at_str = None
+        if self.created_at:
+            if self.created_at.tzinfo is None:
+                # Naive datetime - assume it's UTC
+                created_at_aware = self.created_at.replace(tzinfo=timezone.utc)
+            else:
+                created_at_aware = self.created_at
+            created_at_str = created_at_aware.isoformat()
+        
+        read_at_str = None
+        if self.read_at:
+            if self.read_at.tzinfo is None:
+                read_at_aware = self.read_at.replace(tzinfo=timezone.utc)
+            else:
+                read_at_aware = self.read_at
+            read_at_str = read_at_aware.isoformat()
+        
         return {
             'id': self.id,
             'user_id': self.user_id,
@@ -50,13 +68,13 @@ class Notification(db.Model):
             'related_job_id': self.related_job_id,
             'related_execution_id': self.related_execution_id,
             'is_read': self.is_read,
-            'read_at': self.read_at.isoformat() if self.read_at else None,
-            'created_at': self.created_at.isoformat() if self.created_at else None
+            'read_at': read_at_str,
+            'created_at': created_at_str
         }
 
     def mark_as_read(self):
         """Mark notification as read."""
         if not self.is_read:
             self.is_read = True
-            self.read_at = datetime.utcnow()
+            self.read_at = datetime.now(timezone.utc)
             db.session.commit()
