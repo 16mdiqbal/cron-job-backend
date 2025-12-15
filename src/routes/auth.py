@@ -3,6 +3,7 @@ from flask import Blueprint, request, jsonify
 from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity
 from ..models import db
 from ..models.user import User
+from ..models.notification_preferences import UserNotificationPreferences
 from ..utils.auth import role_required
 
 logger = logging.getLogger(__name__)
@@ -516,6 +517,152 @@ def delete_user(user_id):
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error deleting user: {str(e)}")
+        return jsonify({
+            'error': 'Internal server error',
+            'message': str(e)
+        }), 500
+
+
+@auth_bp.route('/users/<user_id>/preferences', methods=['GET'])
+@jwt_required()
+def get_notification_preferences(user_id):
+    """
+    Get user's notification preferences.
+    Users can only access their own preferences unless they are admin.
+    
+    Headers:
+        Authorization: Bearer <access_token>
+    
+    Returns:
+        200: Preferences retrieved successfully
+        401: Unauthorized (invalid token)
+        403: Forbidden (non-admin accessing other user's preferences)
+        404: User not found
+        500: Internal server error
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        current_user = User.query.filter_by(id=current_user_id).first()
+        
+        # Check permission: users can only access their own preferences, admins can access any
+        if current_user_id != user_id and current_user.role != 'admin':
+            return jsonify({'error': 'Forbidden: Cannot access other users preferences'}), 403
+        
+        user = User.query.filter_by(id=user_id).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        # Get or create preferences
+        preferences = UserNotificationPreferences.query.filter_by(user_id=user_id).first()
+        
+        if not preferences:
+            # Create default preferences if they don't exist
+            preferences = UserNotificationPreferences(
+                user_id=user_id,
+                email_on_job_success=True,
+                email_on_job_failure=True,
+                email_on_job_disabled=False,
+                browser_notifications=False,
+                daily_digest=False,
+                weekly_report=False
+            )
+            db.session.add(preferences)
+            db.session.commit()
+            logger.info(f"Created default notification preferences for user {user_id}")
+        
+        return jsonify({
+            'message': 'Notification preferences retrieved successfully',
+            'preferences': preferences.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error retrieving notification preferences: {str(e)}")
+        return jsonify({
+            'error': 'Internal server error',
+            'message': str(e)
+        }), 500
+
+
+@auth_bp.route('/users/<user_id>/preferences', methods=['PUT'])
+@jwt_required()
+def update_notification_preferences(user_id):
+    """
+    Update user's notification preferences.
+    Users can only update their own preferences unless they are admin.
+    
+    Headers:
+        Authorization: Bearer <access_token>
+    
+    Expected JSON payload:
+    {
+        "email_on_job_success": true,
+        "email_on_job_failure": true,
+        "email_on_job_disabled": false,
+        "browser_notifications": false,
+        "daily_digest": false,
+        "weekly_report": false
+    }
+    
+    Returns:
+        200: Preferences updated successfully
+        400: Bad request (validation errors)
+        401: Unauthorized (invalid token)
+        403: Forbidden (non-admin updating other user's preferences)
+        404: User not found
+        500: Internal server error
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        current_user = User.query.filter_by(id=current_user_id).first()
+        
+        # Check permission: users can only update their own preferences, admins can update any
+        if current_user_id != user_id and current_user.role != 'admin':
+            return jsonify({'error': 'Forbidden: Cannot update other users preferences'}), 403
+        
+        if not request.is_json:
+            return jsonify({'error': 'Content-Type must be application/json'}), 400
+        
+        user = User.query.filter_by(id=user_id).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+        
+        data = request.get_json()
+        
+        # Get or create preferences
+        preferences = UserNotificationPreferences.query.filter_by(user_id=user_id).first()
+        
+        if not preferences:
+            # Create new preferences if they don't exist
+            preferences = UserNotificationPreferences(user_id=user_id)
+            db.session.add(preferences)
+        
+        # Update only provided fields
+        if 'email_on_job_success' in data:
+            preferences.email_on_job_success = bool(data['email_on_job_success'])
+        if 'email_on_job_failure' in data:
+            preferences.email_on_job_failure = bool(data['email_on_job_failure'])
+        if 'email_on_job_disabled' in data:
+            preferences.email_on_job_disabled = bool(data['email_on_job_disabled'])
+        if 'browser_notifications' in data:
+            preferences.browser_notifications = bool(data['browser_notifications'])
+        if 'daily_digest' in data:
+            preferences.daily_digest = bool(data['daily_digest'])
+        if 'weekly_report' in data:
+            preferences.weekly_report = bool(data['weekly_report'])
+        
+        db.session.commit()
+        
+        logger.info(f"Notification preferences updated for user {user_id} by user {current_user_id}")
+        
+        return jsonify({
+            'message': 'Notification preferences updated successfully',
+            'preferences': preferences.to_dict()
+        }), 200
+        
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error updating notification preferences: {str(e)}")
         return jsonify({
             'error': 'Internal server error',
             'message': str(e)
