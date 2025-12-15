@@ -1,8 +1,14 @@
 import logging
-from flask import Blueprint, request, jsonify
+import csv
+import io
+import json
+import os
+from typing import Optional, Dict, List
+from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 from croniter import croniter
 from apscheduler.triggers.cron import CronTrigger
+from zoneinfo import ZoneInfo
 from sqlalchemy import desc
 from ..models import db
 from ..models.job import Job
@@ -26,6 +32,77 @@ ERROR_JOB_NOT_FOUND = 'Job not found'
 
 # Create Blueprint
 jobs_bp = Blueprint('jobs', __name__, url_prefix='/api')
+
+def _get_scheduler_timezone():
+    tz_name = current_app.config.get('SCHEDULER_TIMEZONE', 'Asia/Tokyo')
+    try:
+        return ZoneInfo(tz_name)
+    except Exception:
+        logger.warning(f"Invalid SCHEDULER_TIMEZONE '{tz_name}', falling back to UTC")
+        return ZoneInfo('UTC')
+
+def _truthy(value: Optional[str]) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {'1', 'true', 'yes', 'y', 'on'}
+
+
+def _status_to_active(value: Optional[str]) -> bool:
+    if value is None:
+        return True
+    lowered = value.strip().lower()
+    if lowered in {'disable', 'disabled', 'inactive', 'false', '0', 'no', 'n', 'off'}:
+        return False
+    if lowered in {'enable', 'enabled', 'active', 'true', '1', 'yes', 'y', 'on'}:
+        return True
+    return True
+
+
+def _normalize_csv_rows(rows: List[List[str]]):
+    if not rows:
+        raise ValueError('CSV is empty.')
+
+    raw_headers = rows[0] or []
+    header_names = [(h or '').strip() for h in raw_headers]
+    keep_indexes = [i for i, h in enumerate(header_names) if h]
+
+    if not keep_indexes:
+        raise ValueError('CSV header row has no usable column names.')
+
+    kept_headers = [header_names[i] for i in keep_indexes]
+
+    normalized_rows: List[List[str]] = []
+    removed_empty_row_count = 0
+
+    for raw_row in rows[1:]:
+        padded = list(raw_row or [])
+        if len(padded) < len(raw_headers):
+            padded.extend([''] * (len(raw_headers) - len(padded)))
+
+        kept = [str(padded[i] or '') for i in keep_indexes]
+        if all((c or '').strip() == '' for c in kept):
+            removed_empty_row_count += 1
+            continue
+        normalized_rows.append(kept)
+
+    return kept_headers, normalized_rows, {
+        'original_column_count': len(raw_headers),
+        'original_row_count': max(0, len(rows) - 1),
+        'removed_column_count': len(raw_headers) - len(kept_headers),
+        'removed_empty_row_count': removed_empty_row_count,
+    }
+
+
+def _first_non_empty(row: Dict[str, str], keys: List[str]) -> Optional[str]:
+    for key in keys:
+        value = row.get(key)
+        if value is not None and value.strip() != '':
+            return value.strip()
+    return None
+
+
+def _lower_key_map(headers: List[str], values: List[str]) -> Dict[str, str]:
+    return {str(h or '').strip().lower(): str(values[i] or '').strip() for i, h in enumerate(headers)}
 
 
 @jobs_bp.route('/jobs', methods=['POST'])
@@ -138,7 +215,8 @@ def create_job():
 
         # Add job to APScheduler
         try:
-            trigger = CronTrigger.from_crontab(cron_expression)
+            scheduler_tz = _get_scheduler_timezone()
+            trigger = CronTrigger.from_crontab(cron_expression, timezone=scheduler_tz)
             job_config = {
                 'target_url': new_job.target_url,
                 'github_owner': new_job.github_owner,
@@ -190,6 +268,217 @@ def create_job():
         }), 500
 
 
+@jobs_bp.route('/jobs/bulk-upload', methods=['POST'])
+@jwt_required()
+@role_required('admin', 'user')
+def bulk_upload_jobs():
+    """
+    Bulk create jobs from a CSV file (Admin and User roles only).
+
+    Expects multipart/form-data with:
+      - file: CSV file
+      - default_github_owner (optional): default owner when Repo column doesn't include owner/repo
+      - dry_run (optional): true/false; when true validates only
+
+    Normalization:
+      - Removes empty rows
+      - Drops columns with empty headers
+    """
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'Missing file', 'message': 'Upload a CSV file using form field "file".'}), 400
+
+        uploaded_file = request.files['file']
+        if not uploaded_file or uploaded_file.filename == '':
+            return jsonify({'error': 'Missing file', 'message': 'No file selected.'}), 400
+
+        default_owner = (request.form.get('default_github_owner') or os.getenv('DEFAULT_GITHUB_OWNER') or '').strip() or None
+        dry_run = _truthy(request.form.get('dry_run'))
+
+        raw_bytes = uploaded_file.read()
+        try:
+            csv_text = raw_bytes.decode('utf-8-sig')
+        except Exception:
+            csv_text = raw_bytes.decode('utf-8', errors='replace')
+
+        reader = csv.reader(io.StringIO(csv_text))
+        rows = [row for row in reader]
+        headers, normalized_rows, stats = _normalize_csv_rows(rows)
+
+        current_user = get_current_user()
+
+        errors = []
+        created_jobs = []
+        seen_names = set()
+
+        for row_index, values in enumerate(normalized_rows, start=2):
+            row = _lower_key_map(headers, values)
+
+            name = _first_non_empty(row, ['job name', 'name'])
+            cron_expression = _first_non_empty(row, ['cron schedule (jst)', 'cron expression', 'cron', 'cron_expression'])
+            status = _first_non_empty(row, ['status', 'is_active', 'active'])
+            target_url = _first_non_empty(row, ['target url', 'target_url', 'url'])
+
+            github_owner = _first_non_empty(row, ['github owner', 'owner', 'github_owner'])
+            github_repo = _first_non_empty(row, ['repo', 'github repo', 'github_repo'])
+            github_workflow_name = _first_non_empty(row, ['workflow name', 'github workflow name', 'github_workflow_name'])
+
+            branch = _first_non_empty(row, ['branch', 'ref'])
+            request_body = _first_non_empty(row, ['request body', 'request_body', 'metadata'])
+
+            if not name or not cron_expression:
+                errors.append({'row': row_index, 'error': 'Missing required fields', 'message': 'name and cron_expression are required.'})
+                continue
+
+            if name in seen_names:
+                errors.append({'row': row_index, 'job_name': name, 'error': 'Duplicate job name in CSV'})
+                continue
+            seen_names.add(name)
+
+            if Job.query.filter_by(name=name).first():
+                errors.append({'row': row_index, 'job_name': name, 'error': 'Duplicate job name', 'message': f'A job with the name "{name}" already exists.'})
+                continue
+
+            if not croniter.is_valid(cron_expression):
+                errors.append({'row': row_index, 'job_name': name, 'error': 'Invalid cron expression'})
+                continue
+
+            is_active = _status_to_active(status)
+
+            metadata: dict = {}
+            if request_body:
+                try:
+                    parsed = json.loads(request_body)
+                except Exception as e:
+                    errors.append({'row': row_index, 'job_name': name, 'error': 'Invalid JSON in Request Body', 'message': str(e)})
+                    continue
+                if isinstance(parsed, dict):
+                    metadata = parsed
+                else:
+                    errors.append({'row': row_index, 'job_name': name, 'error': 'Invalid Request Body', 'message': 'Request Body must be a JSON object.'})
+                    continue
+
+            if branch and 'branchDetails' not in metadata:
+                metadata['branchDetails'] = branch
+
+            # Allow Repo to be either "owner/repo" or just "repo"
+            inferred_owner = github_owner
+            inferred_repo = github_repo
+            if github_repo and '/' in github_repo:
+                parts = [p for p in github_repo.split('/') if p]
+                if len(parts) == 2:
+                    inferred_owner, inferred_repo = parts[0].strip(), parts[1].strip()
+
+            if not target_url and not (inferred_owner or default_owner) and (inferred_repo or github_workflow_name):
+                errors.append({'row': row_index, 'job_name': name, 'error': 'Missing GitHub owner', 'message': 'Provide "github_owner" column or default_github_owner.'})
+                continue
+
+            effective_owner = inferred_owner or default_owner
+
+            if not target_url and not (effective_owner and inferred_repo and github_workflow_name):
+                errors.append({
+                    'row': row_index,
+                    'job_name': name,
+                    'error': 'Missing target configuration',
+                    'message': 'Provide target_url or GitHub config (github_owner, github_repo, github_workflow_name).'
+                })
+                continue
+
+            if dry_run:
+                created_jobs.append({'name': name, 'is_active': is_active, 'cron_expression': cron_expression})
+                continue
+
+            new_job = Job(
+                name=name,
+                cron_expression=cron_expression,
+                target_url=target_url or None,
+                github_owner=effective_owner if not target_url else None,
+                github_repo=inferred_repo if not target_url else None,
+                github_workflow_name=github_workflow_name if not target_url else None,
+                created_by=current_user.id if current_user else None,
+                is_active=is_active,
+                enable_email_notifications=False,
+                notify_on_success=False,
+            )
+            if metadata:
+                new_job.set_metadata(metadata)
+
+            db.session.add(new_job)
+            db.session.flush()
+
+            created_jobs.append({'id': new_job.id, 'name': new_job.name, 'is_active': new_job.is_active})
+
+        if dry_run:
+            return jsonify({
+                'message': 'CSV validated successfully',
+                'dry_run': True,
+                'stats': stats,
+                'created_count': len(created_jobs),
+                'error_count': len(errors),
+                'errors': errors,
+                'jobs': created_jobs,
+            }), 200
+
+        db.session.commit()
+
+        # Schedule active jobs after commit; on failures, disable the job and report.
+        scheduling_errors = []
+        scheduler_tz = _get_scheduler_timezone()
+        for job_info in created_jobs:
+            job_id = job_info.get('id')
+            if not job_id:
+                continue
+            job = Job.query.get(job_id)
+            if not job or not job.is_active:
+                continue
+            try:
+                trigger = CronTrigger.from_crontab(job.cron_expression, timezone=scheduler_tz)
+                job_config = {
+                    'target_url': job.target_url,
+                    'github_owner': job.github_owner,
+                    'github_repo': job.github_repo,
+                    'github_workflow_name': job.github_workflow_name,
+                    'metadata': job.get_metadata(),
+                    'enable_email_notifications': job.enable_email_notifications,
+                    'notification_emails': job.get_notification_emails(),
+                    'notify_on_success': job.notify_on_success,
+                }
+                scheduler.add_job(
+                    func=execute_job,
+                    trigger=trigger,
+                    args=[job.id, job.name, job_config],
+                    id=job.id,
+                    name=job.name,
+                    replace_existing=True,
+                )
+            except Exception as e:
+                logger.error(f"Failed to schedule bulk job '{job.name}': {str(e)}")
+                job.is_active = False
+                scheduling_errors.append({'job_name': job.name, 'error': 'Failed to schedule job', 'message': str(e)})
+
+        if scheduling_errors:
+            db.session.commit()
+
+        all_errors = errors + scheduling_errors
+
+        return jsonify({
+            'message': 'Bulk upload processed',
+            'dry_run': False,
+            'stats': stats,
+            'created_count': len(created_jobs),
+            'error_count': len(all_errors),
+            'errors': all_errors,
+            'jobs': created_jobs,
+        }), 200
+
+    except ValueError as e:
+        return jsonify({'error': 'Invalid CSV', 'message': str(e)}), 400
+    except Exception as e:
+        logger.error(f"Error bulk uploading jobs: {str(e)}")
+        db.session.rollback()
+        return jsonify({'error': ERROR_INTERNAL_SERVER, 'message': str(e)}), 500
+
+
 @jobs_bp.route('/jobs', methods=['GET'])
 @jwt_required()
 def list_jobs():
@@ -209,7 +498,7 @@ def list_jobs():
         500: Internal server error
     """
     try:
-        jobs = Job.query.all()
+        jobs = Job.query.order_by(desc(Job.created_at)).all()
         return jsonify({
             'count': len(jobs),
             'jobs': [job.to_dict() for job in jobs]
@@ -412,13 +701,14 @@ def update_job(job_id):
         # Update scheduler if needed
         if needs_scheduler_update:
             try:
+                scheduler_tz = _get_scheduler_timezone()
                 # Remove old job from scheduler
                 if scheduler.get_job(job_id):
                     scheduler.remove_job(job_id)
                 
                 # Add updated job if active
                 if job.is_active:
-                    trigger = CronTrigger.from_crontab(job.cron_expression)
+                    trigger = CronTrigger.from_crontab(job.cron_expression, timezone=scheduler_tz)
                     job_config = {
                         'target_url': job.target_url,
                         'github_owner': job.github_owner,

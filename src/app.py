@@ -5,6 +5,7 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from datetime import timedelta
 from apscheduler.triggers.cron import CronTrigger
+from zoneinfo import ZoneInfo
 from .config import Config
 from .models import db
 from .models.job import Job
@@ -22,6 +23,15 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def _get_scheduler_timezone(app: Flask):
+    tz_name = app.config.get('SCHEDULER_TIMEZONE', 'Asia/Tokyo')
+    try:
+        return ZoneInfo(tz_name)
+    except Exception:
+        logger.warning(f"Invalid SCHEDULER_TIMEZONE '{tz_name}', falling back to UTC")
+        return ZoneInfo('UTC')
 
 
 def create_app():
@@ -82,11 +92,12 @@ def create_app():
     scheduler_enabled = os.getenv('SCHEDULER_ENABLED', 'true').lower() != 'false'
     
     if scheduler_enabled:
+        scheduler_tz = _get_scheduler_timezone(app)
         scheduler.configure(
             jobstores=app.config['SCHEDULER_JOBSTORES'],
             executors=app.config['SCHEDULER_EXECUTORS'],
             job_defaults=app.config['SCHEDULER_JOB_DEFAULTS'],
-            timezone=app.config['SCHEDULER_TIMEZONE']
+            timezone=scheduler_tz
         )
 
         # Load existing jobs from database into scheduler
@@ -94,7 +105,7 @@ def create_app():
             existing_jobs = Job.query.filter_by(is_active=True).all()
             for job in existing_jobs:
                 try:
-                    trigger = CronTrigger.from_crontab(job.cron_expression)
+                    trigger = CronTrigger.from_crontab(job.cron_expression, timezone=scheduler_tz)
                     job_config = {
                         'target_url': job.target_url,
                         'github_owner': job.github_owner,
