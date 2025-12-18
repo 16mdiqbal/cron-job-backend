@@ -1,6 +1,9 @@
 import logging
+from datetime import datetime, date, time, timedelta, timezone
+from typing import Optional
 from flask import Blueprint, request, jsonify
 from flask_jwt_extended import jwt_required, get_jwt_identity
+from sqlalchemy import func
 from ..models import db
 from ..models.notification import Notification
 from ..models.user import User
@@ -9,6 +12,39 @@ logger = logging.getLogger(__name__)
 
 # Create Blueprint
 notifications_bp = Blueprint('notifications', __name__, url_prefix='/api/notifications')
+
+def _parse_iso_date_or_datetime_utc_naive(value: Optional[str]) -> Optional[datetime]:
+    """
+    Parse an ISO date/datetime and normalize to UTC naive datetime for DB comparisons.
+    Accepts:
+      - YYYY-MM-DD
+      - YYYY-MM-DDTHH:MM:SS[.ffffff][Z|+HH:MM]
+    """
+    if not value:
+        return None
+
+    raw = (value or '').strip()
+    if not raw:
+        return None
+
+    # Date-only inputs like "2025-12-18"
+    try:
+        if len(raw) == 10 and raw[4] == '-' and raw[7] == '-':
+            d = date.fromisoformat(raw)
+            return datetime.combine(d, time.min)
+    except Exception:
+        pass
+
+    normalized = raw.replace('Z', '+00:00')
+    try:
+        dt = datetime.fromisoformat(normalized)
+    except ValueError as e:
+        raise ValueError('Invalid date format. Use YYYY-MM-DD or ISO datetime.') from e
+    if dt.tzinfo is None:
+        # Assume UTC if naive
+        dt = dt.replace(tzinfo=timezone.utc)
+    dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
 
 
 @notifications_bp.route('', methods=['GET'])
@@ -22,6 +58,8 @@ def get_notifications():
         page: Page number (default: 1)
         per_page: Items per page (default: 20, max: 100)
         unread_only: Filter to show only unread notifications (default: false)
+        from: ISO date/datetime (inclusive, based on created_at)
+        to: ISO date/datetime (exclusive, based on created_at). Date-only treated as inclusive day.
     
     Headers:
         Authorization: Bearer <access_token>
@@ -38,12 +76,28 @@ def get_notifications():
         page = request.args.get('page', 1, type=int)
         per_page = min(request.args.get('per_page', 20, type=int), 100)
         unread_only = request.args.get('unread_only', 'false').lower() == 'true'
+        from_raw = request.args.get('from')
+        to_raw = request.args.get('to')
+        try:
+            from_dt = _parse_iso_date_or_datetime_utc_naive(from_raw)
+            to_dt = _parse_iso_date_or_datetime_utc_naive(to_raw)
+        except ValueError as e:
+            return jsonify({'error': 'Invalid date', 'message': str(e)}), 400
+        if to_raw and to_dt and len(to_raw.strip()) == 10:
+            to_dt = to_dt + timedelta(days=1)
+        if from_dt and to_dt and from_dt >= to_dt:
+            return jsonify({'error': 'Invalid date range', 'message': '"from" must be earlier than "to".'}), 400
         
         # Build query
         query = Notification.query.filter_by(user_id=current_user_id)
         
         if unread_only:
             query = query.filter_by(is_read=False)
+
+        if from_dt:
+            query = query.filter(Notification.created_at >= from_dt)
+        if to_dt:
+            query = query.filter(Notification.created_at < to_dt)
         
         # Order by created_at descending (newest first)
         query = query.order_by(Notification.created_at.desc())
@@ -56,7 +110,11 @@ def get_notifications():
             'total': paginated.total,
             'page': page,
             'per_page': per_page,
-            'total_pages': paginated.pages
+            'total_pages': paginated.pages,
+            'range': {
+                'from': from_dt.isoformat() if from_dt else None,
+                'to': to_dt.isoformat() if to_dt else None,
+            },
         }), 200
         
     except Exception as e:
@@ -72,6 +130,10 @@ def get_notifications():
 def get_unread_count():
     """
     Get count of unread notifications for the current user.
+
+    Optional query params:
+      - from: ISO date/datetime (inclusive, based on created_at)
+      - to: ISO date/datetime (exclusive, based on created_at). Date-only treated as inclusive day.
     
     Headers:
         Authorization: Bearer <access_token>
@@ -83,14 +145,32 @@ def get_unread_count():
     """
     try:
         current_user_id = get_jwt_identity()
+
+        from_raw = request.args.get('from')
+        to_raw = request.args.get('to')
+        try:
+            from_dt = _parse_iso_date_or_datetime_utc_naive(from_raw)
+            to_dt = _parse_iso_date_or_datetime_utc_naive(to_raw)
+        except ValueError as e:
+            return jsonify({'error': 'Invalid date', 'message': str(e)}), 400
+        if to_raw and to_dt and len(to_raw.strip()) == 10:
+            to_dt = to_dt + timedelta(days=1)
+        if from_dt and to_dt and from_dt >= to_dt:
+            return jsonify({'error': 'Invalid date range', 'message': '"from" must be earlier than "to".'}), 400
         
-        count = Notification.query.filter_by(
-            user_id=current_user_id,
-            is_read=False
-        ).count()
+        query = Notification.query.filter_by(user_id=current_user_id, is_read=False)
+        if from_dt:
+            query = query.filter(Notification.created_at >= from_dt)
+        if to_dt:
+            query = query.filter(Notification.created_at < to_dt)
+        count = query.count()
         
         return jsonify({
-            'unread_count': count
+            'unread_count': count,
+            'range': {
+                'from': from_dt.isoformat() if from_dt else None,
+                'to': to_dt.isoformat() if to_dt else None,
+            },
         }), 200
         
     except Exception as e:
