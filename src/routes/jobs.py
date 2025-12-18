@@ -3,6 +3,8 @@ import csv
 import io
 import json
 import os
+import re
+from datetime import datetime, date, time, timezone, timedelta
 from typing import Optional, Dict, List
 from urllib.parse import urlparse
 from flask import Blueprint, request, jsonify, current_app
@@ -14,6 +16,7 @@ from sqlalchemy import desc
 from sqlalchemy import func
 from ..models import db
 from ..models.job import Job
+from ..models.job_category import JobCategory
 from ..models.job_execution import JobExecution
 from ..scheduler import scheduler
 from ..scheduler.job_executor import execute_job, execute_job_with_app_context, trigger_job_manually
@@ -109,6 +112,179 @@ def _first_non_empty(row: Dict[str, str], keys: List[str]) -> Optional[str]:
 def _lower_key_map(headers: List[str], values: List[str]) -> Dict[str, str]:
     return {str(h or '').strip().lower(): str(values[i] or '').strip() for i, h in enumerate(headers)}
 
+def _parse_iso_date_or_datetime(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+
+    raw = value.strip()
+    if not raw:
+        return None
+
+    # Date-only inputs like "2025-12-18"
+    try:
+        if len(raw) == 10 and raw[4] == '-' and raw[7] == '-':
+            d = date.fromisoformat(raw)
+            return datetime.combine(d, time.min, tzinfo=timezone.utc)
+    except Exception:
+        pass
+
+    # Datetime inputs like "2025-12-18T12:34:56Z" or with offset
+    normalized = raw.replace('Z', '+00:00')
+    dt = datetime.fromisoformat(normalized)
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt
+
+
+def _slugify(value: str) -> str:
+    v = (value or '').strip().lower()
+    v = re.sub(r'[^a-z0-9]+', '-', v)
+    v = re.sub(r'-{2,}', '-', v).strip('-')
+    return v
+
+
+def _resolve_category_slug(raw: Optional[str]) -> str:
+    """
+    Resolve a category from either a slug or a display name.
+    Falls back to 'general' when missing.
+    """
+    if raw is None:
+        return 'general'
+    val = raw.strip()
+    if not val:
+        return 'general'
+
+    # First try slug match
+    slug = _slugify(val)
+    category = JobCategory.query.filter_by(slug=slug).first()
+    if category:
+        return category.slug
+
+    # Then try name match (case-insensitive)
+    category = JobCategory.query.filter(func.lower(JobCategory.name) == val.lower()).first()
+    if category:
+        return category.slug
+
+    return slug  # still return a normalized slug for validation messaging
+
+
+def _validate_category_slug(slug: str) -> Optional[str]:
+    if slug == 'general':
+        return None
+    exists = JobCategory.query.filter_by(slug=slug).first()
+    if not exists:
+        return 'Unknown category. Create it in Settings → Categories first, or choose General.'
+    return None
+
+
+@jobs_bp.route('/job-categories', methods=['GET'])
+@jwt_required()
+def list_job_categories():
+    """
+    List job categories (All authenticated users).
+    Non-admins only see active categories.
+    """
+    include_inactive = _truthy(request.args.get('include_inactive'))
+    query = JobCategory.query
+    if not is_admin() or not include_inactive:
+        query = query.filter(JobCategory.is_active.is_(True))
+    categories = query.order_by(func.lower(JobCategory.name)).all()
+    return jsonify({'categories': [c.to_dict() for c in categories]}), 200
+
+
+@jobs_bp.route('/job-categories', methods=['POST'])
+@jwt_required()
+@role_required('admin')
+def create_job_category():
+    if not request.is_json:
+        return jsonify({'error': 'Content-Type must be application/json'}), 400
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'Missing required fields', 'message': '"name" is required.'}), 400
+
+    slug = (data.get('slug') or '').strip()
+    slug = _slugify(slug or name)
+    if not slug:
+        return jsonify({'error': 'Invalid slug', 'message': 'Unable to generate a valid slug from name.'}), 400
+
+    if JobCategory.query.filter_by(slug=slug).first():
+        return jsonify({'error': 'Duplicate slug', 'message': f'Category slug "{slug}" already exists.'}), 409
+
+    category = JobCategory(slug=slug, name=name, is_active=True)
+    db.session.add(category)
+    db.session.commit()
+    return jsonify({'message': 'Category created', 'category': category.to_dict()}), 201
+
+
+@jobs_bp.route('/job-categories/<category_id>', methods=['PUT'])
+@jwt_required()
+@role_required('admin')
+def update_job_category(category_id):
+    if not request.is_json:
+        return jsonify({'error': 'Content-Type must be application/json'}), 400
+    category = JobCategory.query.get(category_id)
+    if not category:
+        return jsonify({'error': 'Not found', 'message': f'No category found with ID: {category_id}'}), 404
+
+    data = request.get_json(silent=True) or {}
+    jobs_updated = 0
+
+    # Slug is always derived from name to keep them strictly aligned.
+    if 'name' in data:
+        name = (data.get('name') or '').strip()
+        if not name:
+            return jsonify({'error': 'Invalid name', 'message': 'Name cannot be empty.'}), 400
+
+        if category.slug == 'general' and name != category.name:
+            return jsonify({'error': 'Invalid category', 'message': 'The "General" category cannot be renamed.'}), 400
+
+        desired_slug = _slugify(name)
+        if not desired_slug:
+            return jsonify({'error': 'Invalid slug', 'message': 'Unable to generate a valid slug from name.'}), 400
+
+        if desired_slug != category.slug:
+            if JobCategory.query.filter_by(slug=desired_slug).first():
+                return jsonify({'error': 'Duplicate slug', 'message': f'Category slug "{desired_slug}" already exists.'}), 409
+
+            old_slug = category.slug
+            jobs_updated = (
+                Job.query.filter(Job.category == old_slug)
+                .update({'category': desired_slug}, synchronize_session=False)
+            )
+            category.slug = desired_slug
+
+        category.name = name
+
+    # Backwards-compatible: if a client still sends slug explicitly, reject.
+    if 'slug' in data:
+        return jsonify({
+            'error': 'Invalid payload',
+            'message': 'Slug cannot be edited directly; it is derived from name.',
+        }), 400
+
+    if 'is_active' in data:
+        category.is_active = bool(data.get('is_active'))
+
+    db.session.commit()
+    return jsonify({'message': 'Category updated', 'category': category.to_dict(), 'jobs_updated': jobs_updated}), 200
+
+
+@jobs_bp.route('/job-categories/<category_id>', methods=['DELETE'])
+@jwt_required()
+@role_required('admin')
+def delete_job_category(category_id):
+    category = JobCategory.query.get(category_id)
+    if not category:
+        return jsonify({'error': 'Not found', 'message': f'No category found with ID: {category_id}'}), 404
+
+    # Soft-delete: disable instead of removing (jobs may reference its slug).
+    category.is_active = False
+    db.session.commit()
+    return jsonify({'message': 'Category disabled', 'category': category.to_dict()}), 200
+
 
 @jobs_bp.route('/jobs', methods=['POST'])
 @jwt_required()
@@ -178,6 +354,10 @@ def create_job():
         github_owner = data.get('github_owner', '').strip() or None
         github_repo = data.get('github_repo', '').strip() or None
         github_workflow_name = data.get('github_workflow_name', '').strip() or None
+        category = _resolve_category_slug(data.get('category'))
+        category_error = _validate_category_slug(category)
+        if category_error:
+            return jsonify({'error': 'Invalid category', 'message': category_error}), 400
         metadata = data.get('metadata', {})
         enable_email_notifications = data.get('enable_email_notifications', False)
         notification_emails = data.get('notification_emails', []) if enable_email_notifications else []
@@ -216,6 +396,7 @@ def create_job():
             github_owner=github_owner,
             github_repo=github_repo,
             github_workflow_name=github_workflow_name,
+            category=category,
             created_by=current_user.id if current_user else None,
             is_active=True,
             enable_email_notifications=enable_email_notifications,
@@ -312,7 +493,13 @@ def bulk_upload_jobs():
         if not uploaded_file or uploaded_file.filename == '':
             return jsonify({'error': 'Missing file', 'message': 'No file selected.'}), 400
 
-        default_owner = (request.form.get('default_github_owner') or os.getenv('DEFAULT_GITHUB_OWNER') or '').strip() or None
+        # Default GitHub owner:
+        # - form field `default_github_owner` (frontend)
+        # - env var `DEFAULT_GITHUB_OWNER`
+        # - fallback to app default (see `_get_default_github_owner`)
+        default_owner = (request.form.get('default_github_owner') or os.getenv('DEFAULT_GITHUB_OWNER') or '').strip()
+        if not default_owner:
+            default_owner = _get_default_github_owner()
         dry_run = _truthy(request.form.get('dry_run'))
 
         raw_bytes = uploaded_file.read()
@@ -342,6 +529,12 @@ def bulk_upload_jobs():
             github_owner = _first_non_empty(row, ['github owner', 'owner', 'github_owner'])
             github_repo = _first_non_empty(row, ['repo', 'github repo', 'github_repo'])
             github_workflow_name = _first_non_empty(row, ['workflow name', 'github workflow name', 'github_workflow_name'])
+            category_raw = _first_non_empty(row, ['category', 'job category', 'job_category'])
+            category = _resolve_category_slug(category_raw)
+            category_error = _validate_category_slug(category)
+            if category_error:
+                errors.append({'row': row_index, 'job_name': name, 'error': 'Invalid category', 'message': category_error})
+                continue
 
             branch = _first_non_empty(row, ['branch', 'ref'])
             request_body = _first_non_empty(row, ['request body', 'request_body', 'metadata'])
@@ -415,6 +608,7 @@ def bulk_upload_jobs():
                 github_owner=effective_owner if not target_url else None,
                 github_repo=inferred_repo if not target_url else None,
                 github_workflow_name=github_workflow_name if not target_url else None,
+                category=category,
                 created_by=current_user.id if current_user else None,
                 is_active=is_active,
                 enable_email_notifications=False,
@@ -519,9 +713,28 @@ def list_jobs():
     """
     try:
         jobs = Job.query.order_by(desc(Job.created_at)).all()
+        last_exec_rows = (
+            db.session.query(JobExecution.job_id, func.max(JobExecution.started_at))
+            .group_by(JobExecution.job_id)
+            .all()
+        )
+        last_exec_by_job_id = {job_id: started_at for job_id, started_at in last_exec_rows}
+
+        jobs_payload = []
+        for job in jobs:
+            payload = job.to_dict()
+            last_execution_at = last_exec_by_job_id.get(job.id)
+            payload['last_execution_at'] = last_execution_at.isoformat() if last_execution_at else None
+
+            sched_job = scheduler.get_job(job.id)
+            next_run_time = getattr(sched_job, 'next_run_time', None) if sched_job else None
+            payload['next_execution_at'] = next_run_time.isoformat() if next_run_time else None
+
+            jobs_payload.append(payload)
+
         return jsonify({
             'count': len(jobs),
-            'jobs': [job.to_dict() for job in jobs]
+            'jobs': jobs_payload,
         }), 200
     except Exception as e:
         logger.error(f"Error listing jobs: {str(e)}")
@@ -558,9 +771,19 @@ def get_job(job_id):
                 'message': f'No job found with ID: {job_id}'
             }), 404
         
-        return jsonify({
-            'job': job.to_dict()
-        }), 200
+        payload = job.to_dict()
+        last_execution_at = (
+            db.session.query(func.max(JobExecution.started_at))
+            .filter(JobExecution.job_id == job.id)
+            .scalar()
+        )
+        payload['last_execution_at'] = last_execution_at.isoformat() if last_execution_at else None
+
+        sched_job = scheduler.get_job(job.id)
+        next_run_time = getattr(sched_job, 'next_run_time', None) if sched_job else None
+        payload['next_execution_at'] = next_run_time.isoformat() if next_run_time else None
+
+        return jsonify({'job': payload}), 200
         
     except Exception as e:
         logger.error(f"Error retrieving job {job_id}: {str(e)}")
@@ -676,6 +899,15 @@ def update_job(job_id):
         if 'metadata' in data:
             job.set_metadata(data['metadata'])
             needs_scheduler_update = True
+
+        if 'category' in data:
+            category = _resolve_category_slug(data.get('category'))
+            category_error = _validate_category_slug(category)
+            if category_error:
+                return jsonify({'error': 'Invalid category', 'message': category_error}), 400
+            if category != job.category:
+                job.category = category
+                needs_scheduler_update = True
         
         # Update email notification settings if provided
         if 'enable_email_notifications' in data:
@@ -992,6 +1224,8 @@ def get_job_executions(job_id):
         - limit (optional): Maximum number of executions to return (default: 50, max: 200)
         - status (optional): Filter by status ('success', 'failed', 'running')
         - trigger_type (optional): Filter by trigger type ('scheduled', 'manual')
+        - from (optional): ISO date/datetime (inclusive, based on started_at)
+        - to (optional): ISO date/datetime (exclusive, based on started_at). Date-only treated as inclusive day.
     
     Headers:
         Authorization: Bearer <access_token>
@@ -1015,6 +1249,14 @@ def get_job_executions(job_id):
         limit = min(limit, 200)  # Cap at 200
         status = request.args.get('status')
         trigger_type = request.args.get('trigger_type')
+        from_raw = request.args.get('from')
+        to_raw = request.args.get('to')
+        from_dt = _parse_iso_date_or_datetime(from_raw)
+        to_dt = _parse_iso_date_or_datetime(to_raw)
+        if to_raw and to_dt and len(to_raw.strip()) == 10:
+            to_dt = to_dt + timedelta(days=1)
+        if from_dt and to_dt and from_dt >= to_dt:
+            return jsonify({'error': 'Invalid date range', 'message': '"from" must be earlier than "to".'}), 400
         
         # Build query
         query = JobExecution.query.filter_by(job_id=job_id)
@@ -1024,6 +1266,10 @@ def get_job_executions(job_id):
             query = query.filter_by(status=status)
         if trigger_type:
             query = query.filter_by(trigger_type=trigger_type)
+        if from_dt:
+            query = query.filter(JobExecution.started_at >= from_dt)
+        if to_dt:
+            query = query.filter(JobExecution.started_at < to_dt)
         
         # Order by most recent first and apply limit
         executions = query.order_by(desc(JobExecution.started_at)).limit(limit).all()
@@ -1167,6 +1413,8 @@ def list_executions():
         - status (optional): success|failed|running
         - trigger_type (optional): scheduled|manual
         - execution_type (optional): github_actions|webhook
+        - from (optional): ISO date/datetime (inclusive, based on started_at)
+        - to (optional): ISO date/datetime (exclusive, based on started_at). Date-only treated as inclusive day.
     """
     try:
         page = request.args.get('page', default=1, type=int)
@@ -1178,6 +1426,14 @@ def list_executions():
         status = request.args.get('status')
         trigger_type = request.args.get('trigger_type')
         execution_type = request.args.get('execution_type')
+        from_raw = request.args.get('from')
+        to_raw = request.args.get('to')
+        from_dt = _parse_iso_date_or_datetime(from_raw)
+        to_dt = _parse_iso_date_or_datetime(to_raw)
+        if to_raw and to_dt and len(to_raw.strip()) == 10:
+            to_dt = to_dt + timedelta(days=1)
+        if from_dt and to_dt and from_dt >= to_dt:
+            return jsonify({'error': 'Invalid date range', 'message': '"from" must be earlier than "to".'}), 400
 
         query = JobExecution.query.join(Job, JobExecution.job_id == Job.id)
 
@@ -1189,6 +1445,10 @@ def list_executions():
             query = query.filter(JobExecution.trigger_type == trigger_type)
         if execution_type:
             query = query.filter(JobExecution.execution_type == execution_type)
+        if from_dt:
+            query = query.filter(JobExecution.started_at >= from_dt)
+        if to_dt:
+            query = query.filter(JobExecution.started_at < to_dt)
 
         total = query.count()
         total_pages = (total + limit - 1) // limit if total else 0
@@ -1243,12 +1503,38 @@ def get_execution(execution_id):
 def get_execution_statistics():
     """
     Execution summary stats across all jobs (or a single job via job_id).
+
+    Optional query params:
+      - job_id: filter to one job
+      - from: ISO date/datetime (inclusive, based on started_at)
+      - to: ISO date/datetime (exclusive, based on started_at). If a date-only value is provided,
+            it will be treated as the start of that day (UTC) + 1 day to make it inclusive for UI.
     """
     try:
         job_id = request.args.get('job_id')
+        from_raw = request.args.get('from')
+        to_raw = request.args.get('to')
+
+        from_dt = _parse_iso_date_or_datetime(from_raw)
+        to_dt = _parse_iso_date_or_datetime(to_raw)
+
+        # If `to` is a date-only string, make it inclusive by adding 1 day (treat as exclusive upper bound).
+        if to_raw and to_dt and len(to_raw.strip()) == 10:
+            to_dt = to_dt + timedelta(days=1)
+
+        if from_dt and to_dt and from_dt >= to_dt:
+            return jsonify({
+                'error': 'Invalid date range',
+                'message': '"from" must be earlier than "to".',
+            }), 400
+
         base = JobExecution.query
         if job_id:
             base = base.filter(JobExecution.job_id == job_id)
+        if from_dt:
+            base = base.filter(JobExecution.started_at >= from_dt)
+        if to_dt:
+            base = base.filter(JobExecution.started_at < to_dt)
 
         total = base.count()
         successful = base.filter(JobExecution.status == 'success').count()
@@ -1265,6 +1551,10 @@ def get_execution_statistics():
             'running_executions': running,
             'success_rate': success_rate,
             'average_duration_seconds': avg_duration,
+            'range': {
+                'from': from_dt.isoformat() if from_dt else None,
+                'to': to_dt.isoformat() if to_dt else None,
+            },
         }), 200
     except Exception as e:
         logger.error(f"Error getting execution statistics: {str(e)}")

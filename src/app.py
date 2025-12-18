@@ -16,6 +16,7 @@ from .routes.jobs import jobs_bp
 from .routes.auth import auth_bp
 from .routes.notifications import notifications_bp
 from .models.user import User
+from .models.job_category import JobCategory
 
 # Configure logging
 logging.basicConfig(
@@ -69,6 +70,26 @@ def create_app():
     with app.app_context():
         db.create_all()
         logger.info("Database tables created successfully")
+
+        # Seed default job categories (admin-managed)
+        try:
+            if JobCategory.query.count() == 0:
+                seed = [
+                    ('general', 'General'),
+                    ('regression', 'Regression'),
+                    ('dr-testing', 'DR Testing'),
+                    ('feature-testing', 'Feature Testing'),
+                    ('prod-canary', 'Prod/Canary'),
+                    ('refund', 'Refund'),
+                    ('backward-compatibility', 'Backward Compatibility'),
+                ]
+                for slug, name in seed:
+                    db.session.add(JobCategory(slug=slug, name=name, is_active=True))
+                db.session.commit()
+                logger.info("✅ Default job categories seeded successfully")
+        except Exception as e:
+            logger.error(f"Error seeding job categories: {str(e)}")
+            db.session.rollback()
         
         # Create default admin user if it doesn't exist
         admin = User.query.filter_by(username='admin').first()

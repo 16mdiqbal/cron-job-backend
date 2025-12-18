@@ -24,6 +24,9 @@ class Job(db.Model):
     
     # Flexible metadata as JSON (renamed to avoid SQLAlchemy reserved name)
     job_metadata = db.Column(db.Text, nullable=True)
+
+    # Category / grouping (required in current DB schema)
+    category = db.Column(db.String(100), nullable=False, default='general')
     
     # Email notification settings
     enable_email_notifications = db.Column(db.Boolean, default=False, nullable=False)
@@ -94,6 +97,7 @@ class Job(db.Model):
             'github_repo': self.github_repo,
             'github_workflow_name': self.github_workflow_name,
             'metadata': self.get_metadata(),
+            'category': self.category,
             'enable_email_notifications': self.enable_email_notifications,
             'notification_emails': self.get_notification_emails(),
             'notify_on_success': self.notify_on_success,
