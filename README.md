@@ -9,12 +9,14 @@ A production-ready Flask-based REST API for scheduling and managing cron jobs wi
 - ✅ **User Management** - Admin-controlled user registration and management
 - ✅ **Job Ownership** - Track job creators and enforce ownership-based access control
 - ✅ **Complete CRUD Operations** - Create, read, update, and delete scheduled jobs
+- ✅ **Job Categories** - Admin-managed categories used to group jobs (defaults to `general`)
 - ✅ **Cron Expression Validation** - Validates cron syntax before saving
 - ✅ **Dual Execution Modes** - Support for both GitHub Actions workflows and webhook URLs
 - ✅ **Flexible Metadata** - Store custom JSON metadata with each job
 - ✅ **Email Notifications** - Send alerts on job failure with detailed error information
 - ✅ **Job Execution History** - Track execution results, status, and duration
 - ✅ **Execution Statistics** - Analyze job performance with success rates and metrics
+- ✅ **Date Range Filtering** - Filter executions, statistics, and notifications using `from`/`to` query params
 - ✅ **Persistent Storage** - SQLite database (production-ready for MySQL migration)
 - ✅ **Background Scheduler** - APScheduler with SQLAlchemy job store
 - ✅ **CORS Enabled** - Ready for frontend integration with proper auth headers
@@ -38,11 +40,14 @@ cron-job-backend/
 │   │   ├── __init__.py    # Database initialization
 │   │   ├── user.py        # User model with authentication
 │   │   ├── job.py         # Job model with ownership tracking
-│   │   └── job_execution.py # Job execution history model
+│   │   ├── job_category.py # Job category model (admin-managed)
+│   │   ├── job_execution.py # Job execution history model
+│   │   └── notification.py # Notification model (in-app inbox)
 │   ├── routes/
 │   │   ├── __init__.py    # Routes package
 │   │   ├── auth.py        # Authentication endpoints (Blueprint)
-│   │   └── jobs.py        # Job API endpoints (Blueprint)
+│   │   ├── jobs.py        # Job/execution/category API endpoints (Blueprint)
+│   │   └── notifications.py # Notification inbox endpoints (Blueprint)
 │   ├── utils/
 │   │   ├── __init__.py    # Utilities package
 │   │   ├── auth.py        # Auth decorators and helpers
@@ -1100,14 +1105,20 @@ Authorization: Bearer <access_token>
       "id": "uuid-1",
       "name": "Job 1",
       "cron_expression": "*/5 * * * *",
+      "category": "general",
       "is_active": true,
+      "last_execution_at": "2025-12-18T06:49:31.105845",
+      "next_execution_at": "2025-12-18T07:49:00+09:00",
       ...
     },
     {
       "id": "uuid-2",
       "name": "Job 2",
       "cron_expression": "0 * * * *",
+      "category": "dr-testing",
       "is_active": false,
+      "last_execution_at": null,
+      "next_execution_at": null,
       ...
     }
   ]
@@ -1301,6 +1312,8 @@ Authorization: Bearer <access_token>
 - `status` (optional) - Filter by status: `success`, `failed`, `running`
 - `trigger_type` (optional) - Filter by trigger type: `scheduled`, `manual`
 - `limit` (optional) - Limit results (default: 50)
+- `from` (optional) - ISO date/datetime (inclusive, based on `started_at`)
+- `to` (optional) - ISO date/datetime (exclusive, based on `started_at`). Date-only treated as inclusive day.
 
 **Response (200 OK):**
 ```json
@@ -1727,12 +1740,36 @@ Role: admin
 | PUT | `/api/jobs/<id>` | Yes | Admin, Owner | Update job |
 | DELETE | `/api/jobs/<id>` | Yes | Admin, Owner | Delete job |
 
+### Job Category Endpoints
+| Method | Endpoint | Auth Required | Role Required | Description |
+|--------|----------|---------------|---------------|-------------|
+| GET | `/api/job-categories` | Yes | All | List categories |
+| POST | `/api/job-categories` | Yes | Admin | Create category |
+| PUT | `/api/job-categories/<id>` | Yes | Admin | Update category (slug derived from name) |
+| DELETE | `/api/job-categories/<id>` | Yes | Admin | Disable category |
+
 ### Job Execution History Endpoints
 | Method | Endpoint | Auth Required | Role Required | Description |
 |--------|----------|---------------|---------------|-------------|
 | GET | `/api/jobs/<id>/executions` | Yes | All | View execution history |
 | GET | `/api/jobs/<id>/executions/<exec_id>` | Yes | All | Get execution details |
 | GET | `/api/jobs/<id>/executions/stats` | Yes | All | Get execution statistics |
+
+### Global Execution Endpoints
+| Method | Endpoint | Auth Required | Role Required | Description |
+|--------|----------|---------------|---------------|-------------|
+| GET | `/api/executions` | Yes | All | List executions (supports `page`/`limit` and `from`/`to`) |
+| GET | `/api/executions/<exec_id>` | Yes | All | Get execution by ID |
+| GET | `/api/executions/statistics` | Yes | All | Aggregated stats (supports `from`/`to`) |
+
+### Notification Endpoints
+| Method | Endpoint | Auth Required | Role Required | Description |
+|--------|----------|---------------|---------------|-------------|
+| GET | `/api/notifications` | Yes | All | List notifications (supports `unread_only` and `from`/`to`) |
+| GET | `/api/notifications/unread-count` | Yes | All | Unread count (supports `from`/`to`) |
+| PUT | `/api/notifications/<id>/read` | Yes | All | Mark notification as read |
+| PUT | `/api/notifications/read-all` | Yes | All | Mark all notifications as read |
+| DELETE | `/api/notifications/<id>` | Yes | All | Delete notification |
 
 ## License
 
