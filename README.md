@@ -12,7 +12,8 @@ A production-ready Flask-based REST API for scheduling and managing cron jobs wi
 - ✅ **Job Categories** - Admin-managed categories used to group jobs (defaults to `general`)
 - ✅ **PIC Teams** - Admin-managed PIC teams for job ownership routing
 - ✅ **Job End Date (JST)** - Required end date; expired jobs are auto-paused to prevent unnecessary runs
-- ✅ **Weekly Reminders (JST)** - Monday reminders for jobs ending within 30 days (in-app notifications; Slack integration deferred)
+- ✅ **Weekly Reminders (JST)** - Monday reminders for jobs ending within 30 days (in-app + optional Slack)
+- ✅ **Slack Integration** - Admin-configured Slack webhook + per-team Slack handle for mentions
 - ✅ **Cron Expression Validation** - Validates cron syntax before saving
 - ✅ **Dual Execution Modes** - Support for both GitHub Actions workflows and webhook URLs
 - ✅ **Flexible Metadata** - Store custom JSON metadata with each job
@@ -46,6 +47,7 @@ cron-job-backend/
 │   │   ├── job.py         # Job model with ownership tracking
 │   │   ├── job_category.py # Job category model (admin-managed)
 │   │   ├── pic_team.py    # PIC team model (admin-managed)
+│   │   ├── slack_settings.py # Global Slack integration settings
 │   │   ├── job_execution.py # Job execution history model
 │   │   └── notification.py # Notification model (in-app inbox)
 │   │   └── ui_preferences.py # Per-user UI preferences
@@ -59,6 +61,7 @@ cron-job-backend/
 │   │   ├── auth.py        # Auth decorators and helpers
 │   │   ├── email.py       # Email notification utilities
 │   │   └── sqlite_schema.py # Lightweight SQLite schema guard (no Alembic)
+│   │   └── slack.py       # Slack incoming webhook helper
 │   ├── services/
 │   │   └── end_date_maintenance.py # Weekly end-date reminders + auto-pause
 │   └── scheduler/
@@ -133,6 +136,7 @@ pip install -r requirements.txt
 - `GITHUB_TOKEN` - GitHub personal access token (optional, for GitHub Actions)
 - `SCHEDULER_TIMEZONE` - Scheduler timezone (default: Asia/Tokyo)
 - `SCHEDULER_ENABLED` - Set to `false` to disable APScheduler startup (useful for scripts/tests)
+- `FRONTEND_BASE_URL` - Used to generate job links in Slack messages (default: http://localhost:5173)
 
 ## Notes / Behavior
 
@@ -143,7 +147,7 @@ pip install -r requirements.txt
   - If a job is triggered after its `end_date`, it is **auto-paused** and removed from the scheduler.
 - **Weekly reminders:**
   - A Monday (JST) scheduler job creates in-app reminders for jobs ending in ≤ 30 days.
-  - Slack delivery is intentionally deferred; notifications are currently in-app.
+  - If Slack is enabled in Settings, the same reminders are also sent to Slack.
 
 ## Key APIs
 
@@ -152,6 +156,9 @@ pip install -r requirements.txt
   - `POST /api/pic-teams` (admin)
   - `PUT /api/pic-teams/<id>` (admin)
   - `DELETE /api/pic-teams/<id>` (admin, disables)
+- **Slack Settings (admin)**
+  - `GET /api/settings/slack`
+  - `PUT /api/settings/slack`
 - **UI Preferences (per user)**
   - `GET /api/auth/users/<user_id>/ui-preferences`
   - `PUT /api/auth/users/<user_id>/ui-preferences`

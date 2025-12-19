@@ -3,15 +3,18 @@ from datetime import datetime, timezone
 from . import db
 
 
-class PicTeam(db.Model):
-    __tablename__ = 'pic_teams'
+class SlackSettings(db.Model):
+    """
+    Global Slack integration settings (admin-managed).
+
+    Note: This stores the webhook URL in plaintext in the database.
+    """
+    __tablename__ = 'slack_settings'
 
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    slug = db.Column(db.String(100), nullable=False, unique=True, index=True)
-    name = db.Column(db.String(255), nullable=False)
-    # Slack handle/mention used in notifications (e.g. "@qa-team" or "<!subteam^S123ABC>")
-    slack_handle = db.Column(db.String(255), nullable=True)
-    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    is_enabled = db.Column(db.Boolean, default=False, nullable=False)
+    webhook_url = db.Column(db.Text, nullable=True)
+    channel = db.Column(db.String(255), nullable=True)
 
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
     updated_at = db.Column(
@@ -24,10 +27,10 @@ class PicTeam(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
-            'slug': self.slug,
-            'name': self.name,
-            'slack_handle': self.slack_handle,
-            'is_active': self.is_active,
+            'is_enabled': self.is_enabled,
+            'webhook_url': self.webhook_url,
+            'channel': self.channel,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
+
