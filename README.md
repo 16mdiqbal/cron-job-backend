@@ -10,6 +10,9 @@ A production-ready Flask-based REST API for scheduling and managing cron jobs wi
 - ✅ **Job Ownership** - Track job creators and enforce ownership-based access control
 - ✅ **Complete CRUD Operations** - Create, read, update, and delete scheduled jobs
 - ✅ **Job Categories** - Admin-managed categories used to group jobs (defaults to `general`)
+- ✅ **PIC Teams** - Admin-managed PIC teams for job ownership routing
+- ✅ **Job End Date (JST)** - Required end date; expired jobs are auto-paused to prevent unnecessary runs
+- ✅ **Weekly Reminders (JST)** - Monday reminders for jobs ending within 30 days (in-app notifications; Slack integration deferred)
 - ✅ **Cron Expression Validation** - Validates cron syntax before saving
 - ✅ **Dual Execution Modes** - Support for both GitHub Actions workflows and webhook URLs
 - ✅ **Flexible Metadata** - Store custom JSON metadata with each job
@@ -22,6 +25,7 @@ A production-ready Flask-based REST API for scheduling and managing cron jobs wi
 - ✅ **CORS Enabled** - Ready for frontend integration with proper auth headers
 - ✅ **Unique Job Names** - Prevents duplicate job names
 - ✅ **Active/Inactive Toggle** - Enable or disable jobs without deletion
+- ✅ **Per-User UI Preferences** - Persist UI settings (e.g., Jobs table columns) across devices
 - ✅ **Blueprint Architecture** - Clean, maintainable code structure
 
 ## Project Structure
@@ -41,8 +45,10 @@ cron-job-backend/
 │   │   ├── user.py        # User model with authentication
 │   │   ├── job.py         # Job model with ownership tracking
 │   │   ├── job_category.py # Job category model (admin-managed)
+│   │   ├── pic_team.py    # PIC team model (admin-managed)
 │   │   ├── job_execution.py # Job execution history model
 │   │   └── notification.py # Notification model (in-app inbox)
+│   │   └── ui_preferences.py # Per-user UI preferences
 │   ├── routes/
 │   │   ├── __init__.py    # Routes package
 │   │   ├── auth.py        # Authentication endpoints (Blueprint)
@@ -51,7 +57,10 @@ cron-job-backend/
 │   ├── utils/
 │   │   ├── __init__.py    # Utilities package
 │   │   ├── auth.py        # Auth decorators and helpers
-│   │   └── email.py       # Email notification utilities
+│   │   ├── email.py       # Email notification utilities
+│   │   └── sqlite_schema.py # Lightweight SQLite schema guard (no Alembic)
+│   ├── services/
+│   │   └── end_date_maintenance.py # Weekly end-date reminders + auto-pause
 │   └── scheduler/
 │       ├── __init__.py    # Scheduler initialization
 │       └── job_executor.py # Job execution functions
@@ -124,6 +133,34 @@ pip install -r requirements.txt
 - `GITHUB_TOKEN` - GitHub personal access token (optional, for GitHub Actions)
 - `SCHEDULER_TIMEZONE` - Scheduler timezone (default: Asia/Tokyo)
 - `SCHEDULER_ENABLED` - Set to `false` to disable APScheduler startup (useful for scripts/tests)
+
+## Notes / Behavior
+
+- **SQLite schema updates (no Alembic):**
+  - The app uses a lightweight SQLite schema guard on startup (`src/utils/sqlite_schema.py`) to add new columns when needed.
+- **End date enforcement:**
+  - Jobs require an `end_date` (date-only) and comparisons are done in **JST**.
+  - If a job is triggered after its `end_date`, it is **auto-paused** and removed from the scheduler.
+- **Weekly reminders:**
+  - A Monday (JST) scheduler job creates in-app reminders for jobs ending in ≤ 30 days.
+  - Slack delivery is intentionally deferred; notifications are currently in-app.
+
+## Key APIs
+
+- **PIC Teams**
+  - `GET /api/pic-teams`
+  - `POST /api/pic-teams` (admin)
+  - `PUT /api/pic-teams/<id>` (admin)
+  - `DELETE /api/pic-teams/<id>` (admin, disables)
+- **UI Preferences (per user)**
+  - `GET /api/auth/users/<user_id>/ui-preferences`
+  - `PUT /api/auth/users/<user_id>/ui-preferences`
+
+## Scripts
+
+- `./start_server.sh` starts the backend on `http://localhost:5001`.
+  - It **does not wipe the database by default**.
+  - To wipe legacy DB files, run: `WIPE_DB=true ./start_server.sh`
 ### 3. Configure Environment Variables
 
 ```bash

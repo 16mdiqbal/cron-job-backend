@@ -4,6 +4,7 @@ from flask_jwt_extended import create_access_token, create_refresh_token, jwt_re
 from ..models import db
 from ..models.user import User
 from ..models.notification_preferences import UserNotificationPreferences
+from ..models.ui_preferences import UserUiPreferences
 from ..utils.auth import role_required
 
 logger = logging.getLogger(__name__)
@@ -667,3 +668,106 @@ def update_notification_preferences(user_id):
             'error': 'Internal server error',
             'message': str(e)
         }), 500
+
+
+def _default_jobs_table_columns():
+    # Keep the table quiet by default.
+    return {
+        'pic_team': True,
+        'end_date': True,
+        'cron_expression': False,
+        'target_url': False,
+        'last_execution_at': False,
+    }
+
+
+@auth_bp.route('/users/<user_id>/ui-preferences', methods=['GET'])
+@jwt_required()
+def get_ui_preferences(user_id):
+    """
+    Get user's UI preferences (e.g., Jobs table column visibility).
+    Users can only access their own preferences unless they are admin.
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        current_user = User.query.filter_by(id=current_user_id).first()
+        if not current_user:
+            return jsonify({'error': 'Unauthorized'}), 401
+
+        if current_user_id != user_id and current_user.role != 'admin':
+            return jsonify({'error': 'Forbidden: Cannot access other users preferences'}), 403
+
+        user = User.query.filter_by(id=user_id).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        prefs = UserUiPreferences.query.filter_by(user_id=user_id).first()
+        if not prefs:
+            prefs = UserUiPreferences(user_id=user_id)
+            prefs.set_jobs_table_columns(_default_jobs_table_columns())
+            db.session.add(prefs)
+            db.session.commit()
+
+        columns = prefs.get_jobs_table_columns() or _default_jobs_table_columns()
+        return jsonify({'preferences': {'jobs_table_columns': columns}}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error retrieving UI preferences: {str(e)}")
+        return jsonify({'error': 'Internal server error', 'message': str(e)}), 500
+
+
+@auth_bp.route('/users/<user_id>/ui-preferences', methods=['PUT'])
+@jwt_required()
+def update_ui_preferences(user_id):
+    """
+    Update user's UI preferences.
+    Users can only update their own preferences unless they are admin.
+    """
+    try:
+        current_user_id = get_jwt_identity()
+        current_user = User.query.filter_by(id=current_user_id).first()
+        if not current_user:
+            return jsonify({'error': 'Unauthorized'}), 401
+
+        if current_user_id != user_id and current_user.role != 'admin':
+            return jsonify({'error': 'Forbidden: Cannot update other users preferences'}), 403
+
+        if not request.is_json:
+            return jsonify({'error': 'Content-Type must be application/json'}), 400
+
+        user = User.query.filter_by(id=user_id).first()
+        if not user:
+            return jsonify({'error': 'User not found'}), 404
+
+        data = request.get_json(silent=True) or {}
+        if not isinstance(data, dict):
+            return jsonify({'error': 'Invalid payload', 'message': 'JSON body must be an object.'}), 400
+
+        incoming_cols = data.get('jobs_table_columns')
+        if incoming_cols is None:
+            return jsonify({'error': 'Missing required fields', 'message': '"jobs_table_columns" is required.'}), 400
+        if not isinstance(incoming_cols, dict):
+            return jsonify({'error': 'Invalid payload', 'message': '"jobs_table_columns" must be an object.'}), 400
+
+        allowed_keys = set(_default_jobs_table_columns().keys())
+        normalized = _default_jobs_table_columns()
+        for k, v in incoming_cols.items():
+            if k in allowed_keys:
+                normalized[k] = bool(v)
+
+        prefs = UserUiPreferences.query.filter_by(user_id=user_id).first()
+        if not prefs:
+            prefs = UserUiPreferences(user_id=user_id)
+            db.session.add(prefs)
+
+        prefs.set_jobs_table_columns(normalized)
+        db.session.commit()
+
+        return jsonify({'preferences': {'jobs_table_columns': normalized}}), 200
+    except ValueError as e:
+        db.session.rollback()
+        return jsonify({'error': 'Invalid payload', 'message': str(e)}), 400
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error updating UI preferences: {str(e)}")
+        return jsonify({'error': 'Internal server error', 'message': str(e)}), 500
