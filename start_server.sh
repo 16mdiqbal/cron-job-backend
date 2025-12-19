@@ -1,21 +1,31 @@
 #!/bin/bash
 
-# Stop any existing server
-echo "Stopping any existing Flask server..."
-pkill -f "python -m src.app" 2>/dev/null || true
-sleep 1
+set -euo pipefail
 
-# Clean up old database instances from different locations to avoid confusion
-echo "Cleaning up old database files from root directory..."
-rm -f /Users/mohammadiqbal/Documents/Workspace/cron-job-backend/cron_jobs.db 2>/dev/null || true
-rm -f /Users/mohammadiqbal/Documents/Workspace/cron-job-backend/instance/cron_jobs.db 2>/dev/null || true
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Stop any existing server (optional)
+if [[ "${STOP_EXISTING:-true}" == "true" ]]; then
+  echo "Stopping any existing Flask server..."
+  pkill -f "python -m src.app" 2>/dev/null || true
+  sleep 1
+fi
+
+# IMPORTANT: do not wipe DB by default.
+# If you really want to wipe, run:
+#   WIPE_DB=true ./start_server.sh
+if [[ "${WIPE_DB:-false}" == "true" ]]; then
+  echo "WIPE_DB=true: removing legacy DB files (not src/instance)"
+  rm -f "$ROOT_DIR/cron_jobs.db" 2>/dev/null || true
+  rm -f "$ROOT_DIR/instance/cron_jobs.db" 2>/dev/null || true
+fi
 
 # Ensure the correct database directory exists
-mkdir -p /Users/mohammadiqbal/Documents/Workspace/cron-job-backend/src/instance
+mkdir -p "$ROOT_DIR/src/instance"
 
 # Start the server
 echo "Starting Flask server..."
-cd /Users/mohammadiqbal/Documents/Workspace/cron-job-backend
+cd "$ROOT_DIR"
 source venv/bin/activate
 python -m src.app &
 SERVER_PID=$!

@@ -27,6 +27,12 @@ class Job(db.Model):
 
     # Category / grouping (required in current DB schema)
     category = db.Column(db.String(100), nullable=False, default='general')
+
+    # Ownership + lifecycle
+    # - end_date is required at API level for new jobs (stored as date-only)
+    # - pic_team is required at API level for new jobs (stores PicTeam.slug)
+    end_date = db.Column(db.Date, nullable=True)
+    pic_team = db.Column(db.String(100), nullable=True)
     
     # Email notification settings
     enable_email_notifications = db.Column(db.Boolean, default=False, nullable=False)
@@ -98,6 +104,8 @@ class Job(db.Model):
             'github_workflow_name': self.github_workflow_name,
             'metadata': self.get_metadata(),
             'category': self.category,
+            'end_date': self.end_date.isoformat() if self.end_date else None,
+            'pic_team': self.pic_team,
             'enable_email_notifications': self.enable_email_notifications,
             'notification_emails': self.get_notification_emails(),
             'notify_on_success': self.notify_on_success,

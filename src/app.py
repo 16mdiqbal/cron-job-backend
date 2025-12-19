@@ -3,7 +3,7 @@ import os
 from flask import Flask
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
-from datetime import timedelta
+from datetime import datetime, timedelta
 from apscheduler.triggers.cron import CronTrigger
 from zoneinfo import ZoneInfo
 from .config import Config
@@ -11,12 +11,18 @@ from .models import db
 from .models.job import Job
 from .utils.email import mail
 from .scheduler import scheduler
-from .scheduler.job_executor import execute_job, execute_job_with_app_context, set_flask_app
+from .scheduler.job_executor import (
+    execute_job,
+    execute_job_with_app_context,
+    run_end_date_maintenance_with_app_context,
+    set_flask_app,
+)
 from .routes.jobs import jobs_bp
 from .routes.auth import auth_bp
 from .routes.notifications import notifications_bp
 from .models.user import User
 from .models.job_category import JobCategory
+from .utils.sqlite_schema import ensure_sqlite_schema
 
 # Configure logging
 logging.basicConfig(
@@ -69,6 +75,7 @@ def create_app():
     # Create database tables and initialize default admin user
     with app.app_context():
         db.create_all()
+        ensure_sqlite_schema(db)
         logger.info("Database tables created successfully")
 
         # Seed default job categories (admin-managed)
@@ -124,9 +131,17 @@ def create_app():
 
         # Load existing jobs from database into scheduler
         with app.app_context():
+            today_jst = datetime.now(scheduler_tz).date()
             existing_jobs = Job.query.filter_by(is_active=True).all()
             for job in existing_jobs:
                 try:
+                    # Auto-pause expired jobs (quietly) to prevent unexpected executions
+                    if job.end_date and job.end_date < today_jst:
+                        job.is_active = False
+                        db.session.commit()
+                        logger.info(f"Auto-paused expired job '{job.name}' (ID: {job.id}) due to end_date")
+                        continue
+
                     trigger = CronTrigger.from_crontab(job.cron_expression, timezone=scheduler_tz)
                     job_config = {
                         'target_url': job.target_url,
@@ -149,6 +164,18 @@ def create_app():
                     logger.info(f"Loaded job '{job.name}' (ID: {job.id}) into scheduler")
                 except Exception as e:
                     logger.error(f"Failed to load job '{job.name}': {str(e)}")
+
+        # Weekly maintenance: end_date reminders + auto-pause (Mondays, JST)
+        try:
+            scheduler.add_job(
+                func=run_end_date_maintenance_with_app_context,
+                trigger=CronTrigger(day_of_week='mon', hour=9, minute=0, timezone=scheduler_tz),
+                id='end_date_maintenance',
+                name='End date maintenance',
+                replace_existing=True,
+            )
+        except Exception as e:
+            logger.error(f"Failed to schedule end_date maintenance job: {e}")
 
         if not scheduler.running:
             scheduler.start()

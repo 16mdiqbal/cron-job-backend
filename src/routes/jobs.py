@@ -18,6 +18,7 @@ from sqlalchemy import func
 from ..models import db
 from ..models.job import Job
 from ..models.job_category import JobCategory
+from ..models.pic_team import PicTeam
 from ..models.job_execution import JobExecution
 from ..scheduler import scheduler
 from ..scheduler.job_executor import execute_job, execute_job_with_app_context, trigger_job_manually
@@ -213,6 +214,56 @@ def _validate_category_slug(slug: str) -> Optional[str]:
     return None
 
 
+def _today_jst() -> date:
+    return datetime.now(_get_scheduler_timezone()).date()
+
+
+def _parse_end_date(value: Optional[str]) -> Optional[date]:
+    if value is None:
+        return None
+    raw = (value or '').strip()
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except Exception as e:
+        raise ValueError('Invalid end_date. Use YYYY-MM-DD.') from e
+
+
+def _resolve_pic_team_slug(raw: Optional[str]) -> Optional[str]:
+    """
+    Resolve a PIC team from either a slug or a display name.
+    Returns a normalized slug (even if it doesn't exist) so validation can explain.
+    """
+    if raw is None:
+        return None
+    val = raw.strip()
+    if not val:
+        return None
+
+    slug = _slugify(val)
+    team = PicTeam.query.filter_by(slug=slug).first()
+    if team:
+        return team.slug
+
+    team = PicTeam.query.filter(func.lower(PicTeam.name) == val.lower()).first()
+    if team:
+        return team.slug
+
+    return slug
+
+
+def _validate_pic_team_slug(slug: Optional[str]) -> Optional[str]:
+    if not slug:
+        return 'PIC team is required. Create one in Settings → PIC Teams.'
+    team = PicTeam.query.filter_by(slug=slug).first()
+    if not team:
+        return 'Unknown PIC team. Create it in Settings → PIC Teams first.'
+    if not team.is_active:
+        return 'PIC team is disabled. Enable it in Settings → PIC Teams or choose another.'
+    return None
+
+
 @jobs_bp.route('/job-categories', methods=['GET'])
 @jwt_required()
 def list_job_categories():
@@ -318,6 +369,107 @@ def delete_job_category(category_id):
     category.is_active = False
     db.session.commit()
     return jsonify({'message': 'Category disabled', 'category': category.to_dict()}), 200
+
+
+@jobs_bp.route('/pic-teams', methods=['GET'])
+@jwt_required()
+def list_pic_teams():
+    """
+    List PIC teams (All authenticated users).
+    Non-admins only see active teams.
+    """
+    include_inactive = _truthy(request.args.get('include_inactive'))
+    query = PicTeam.query
+    if not is_admin() or not include_inactive:
+        query = query.filter(PicTeam.is_active.is_(True))
+    teams = query.order_by(func.lower(PicTeam.name)).all()
+    return jsonify({'pic_teams': [t.to_dict() for t in teams]}), 200
+
+
+@jobs_bp.route('/pic-teams', methods=['POST'])
+@jwt_required()
+@role_required('admin')
+def create_pic_team():
+    if not request.is_json:
+        return jsonify({'error': 'Content-Type must be application/json'}), 400
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()
+    if not name:
+        return jsonify({'error': 'Missing required fields', 'message': '"name" is required.'}), 400
+
+    slug = (data.get('slug') or '').strip()
+    slug = _slugify(slug or name)
+    if not slug:
+        return jsonify({'error': 'Invalid slug', 'message': 'Unable to generate a valid slug from name.'}), 400
+
+    if PicTeam.query.filter_by(slug=slug).first():
+        return jsonify({'error': 'Duplicate slug', 'message': f'PIC team slug "{slug}" already exists.'}), 409
+
+    team = PicTeam(slug=slug, name=name, is_active=True)
+    db.session.add(team)
+    db.session.commit()
+    return jsonify({'message': 'PIC team created', 'pic_team': team.to_dict()}), 201
+
+
+@jobs_bp.route('/pic-teams/<team_id>', methods=['PUT'])
+@jwt_required()
+@role_required('admin')
+def update_pic_team(team_id):
+    if not request.is_json:
+        return jsonify({'error': 'Content-Type must be application/json'}), 400
+    team = PicTeam.query.get(team_id)
+    if not team:
+        return jsonify({'error': 'Not found', 'message': f'No PIC team found with ID: {team_id}'}), 404
+
+    data = request.get_json(silent=True) or {}
+    jobs_updated = 0
+
+    if 'name' in data:
+        name = (data.get('name') or '').strip()
+        if not name:
+            return jsonify({'error': 'Invalid name', 'message': 'Name cannot be empty.'}), 400
+
+        desired_slug = _slugify(name)
+        if not desired_slug:
+            return jsonify({'error': 'Invalid slug', 'message': 'Unable to generate a valid slug from name.'}), 400
+
+        if desired_slug != team.slug:
+            if PicTeam.query.filter_by(slug=desired_slug).first():
+                return jsonify({'error': 'Duplicate slug', 'message': f'PIC team slug "{desired_slug}" already exists.'}), 409
+
+            old_slug = team.slug
+            jobs_updated = (
+                Job.query.filter(Job.pic_team == old_slug)
+                .update({'pic_team': desired_slug}, synchronize_session=False)
+            )
+            team.slug = desired_slug
+
+        team.name = name
+
+    if 'slug' in data:
+        return jsonify({
+            'error': 'Invalid payload',
+            'message': 'Slug cannot be edited directly; it is derived from name.',
+        }), 400
+
+    if 'is_active' in data:
+        team.is_active = bool(data.get('is_active'))
+
+    db.session.commit()
+    return jsonify({'message': 'PIC team updated', 'pic_team': team.to_dict(), 'jobs_updated': jobs_updated}), 200
+
+
+@jobs_bp.route('/pic-teams/<team_id>', methods=['DELETE'])
+@jwt_required()
+@role_required('admin')
+def delete_pic_team(team_id):
+    team = PicTeam.query.get(team_id)
+    if not team:
+        return jsonify({'error': 'Not found', 'message': f'No PIC team found with ID: {team_id}'}), 404
+
+    team.is_active = False
+    db.session.commit()
+    return jsonify({'message': 'PIC team disabled', 'pic_team': team.to_dict()}), 200
 
 
 @jobs_bp.route('/jobs/validate-cron', methods=['POST'])
@@ -475,8 +627,8 @@ def create_job():
 
         data = request.get_json()
 
-        # Validate required fields (only name and cron_expression are mandatory)
-        required_fields = ['name', 'cron_expression']
+        # Validate required fields
+        required_fields = ['name', 'cron_expression', 'end_date']
         missing_fields = [field for field in required_fields if field not in data]
         
         if missing_fields:
@@ -522,6 +674,22 @@ def create_job():
         notification_emails = data.get('notification_emails', []) if enable_email_notifications else []
         notify_on_success = data.get('notify_on_success', False) if enable_email_notifications else False
 
+        # Required lifecycle/ownership fields
+        try:
+            end_date = _parse_end_date(data.get('end_date'))
+        except ValueError as e:
+            return jsonify({'error': 'Invalid end_date', 'message': str(e)}), 400
+        if not end_date:
+            return jsonify({'error': 'Missing required fields', 'message': '"end_date" is required (YYYY-MM-DD).'}), 400
+        if end_date < _today_jst():
+            return jsonify({'error': 'Invalid end_date', 'message': 'end_date must be today or in the future (JST).'}), 400
+
+        pic_team_raw = data.get('pic_team') or data.get('pic_team_slug')
+        pic_team = _resolve_pic_team_slug(pic_team_raw)
+        pic_team_error = _validate_pic_team_slug(pic_team)
+        if pic_team_error:
+            return jsonify({'error': 'Invalid PIC team', 'message': pic_team_error}), 400
+
         # Validate that at least one target is provided (target_url OR GitHub config)
         if not target_url and not (github_owner and github_repo and github_workflow_name):
             # Allow GitHub jobs without owner; default it to the configured org/owner.
@@ -556,6 +724,8 @@ def create_job():
             github_repo=github_repo,
             github_workflow_name=github_workflow_name,
             category=category,
+            end_date=end_date,
+            pic_team=pic_team,
             created_by=current_user.id if current_user else None,
             is_active=True,
             enable_email_notifications=enable_email_notifications,
@@ -695,6 +865,26 @@ def bulk_upload_jobs():
                 errors.append({'row': row_index, 'job_name': name, 'error': 'Invalid category', 'message': category_error})
                 continue
 
+            end_date_raw = _first_non_empty(row, ['end date', 'end_date'])
+            pic_team_raw = _first_non_empty(row, ['pic team', 'pic_team', 'pic team slug', 'pic_team_slug'])
+            try:
+                end_date = _parse_end_date(end_date_raw)
+            except ValueError as e:
+                errors.append({'row': row_index, 'job_name': name, 'error': 'Invalid end_date', 'message': str(e)})
+                continue
+            if not end_date:
+                errors.append({'row': row_index, 'job_name': name, 'error': 'Missing required fields', 'message': 'end_date (YYYY-MM-DD) is required.'})
+                continue
+            if end_date < _today_jst():
+                errors.append({'row': row_index, 'job_name': name, 'error': 'Invalid end_date', 'message': 'end_date must be today or in the future (JST).'})
+                continue
+
+            pic_team = _resolve_pic_team_slug(pic_team_raw)
+            pic_team_error = _validate_pic_team_slug(pic_team)
+            if pic_team_error:
+                errors.append({'row': row_index, 'job_name': name, 'error': 'Invalid PIC team', 'message': pic_team_error})
+                continue
+
             branch = _first_non_empty(row, ['branch', 'ref'])
             request_body = _first_non_empty(row, ['request body', 'request_body', 'metadata'])
 
@@ -758,7 +948,7 @@ def bulk_upload_jobs():
                 continue
 
             if dry_run:
-                created_jobs.append({'name': name, 'is_active': is_active, 'cron_expression': cron_expression})
+                created_jobs.append({'name': name, 'is_active': is_active, 'cron_expression': cron_expression, 'end_date': end_date_raw, 'pic_team': pic_team})
                 continue
 
             new_job = Job(
@@ -769,6 +959,8 @@ def bulk_upload_jobs():
                 github_repo=inferred_repo if not target_url else None,
                 github_workflow_name=github_workflow_name if not target_url else None,
                 category=category,
+                end_date=end_date,
+                pic_team=pic_team,
                 created_by=current_user.id if current_user else None,
                 is_active=is_active,
                 enable_email_notifications=False,
@@ -1069,6 +1261,29 @@ def update_job(job_id):
             if category != job.category:
                 job.category = category
                 needs_scheduler_update = True
+
+        if 'end_date' in data:
+            try:
+                parsed_end_date = _parse_end_date(data.get('end_date'))
+            except ValueError as e:
+                return jsonify({'error': 'Invalid end_date', 'message': str(e)}), 400
+            if not parsed_end_date:
+                return jsonify({'error': 'Invalid end_date', 'message': 'end_date is required (YYYY-MM-DD).'}), 400
+            if parsed_end_date < _today_jst():
+                return jsonify({'error': 'Invalid end_date', 'message': 'end_date must be today or in the future (JST).'}), 400
+            if parsed_end_date != job.end_date:
+                job.end_date = parsed_end_date
+                needs_scheduler_update = True
+
+        if 'pic_team' in data or 'pic_team_slug' in data:
+            pic_team_raw = data.get('pic_team') or data.get('pic_team_slug')
+            pic_team = _resolve_pic_team_slug(pic_team_raw)
+            pic_team_error = _validate_pic_team_slug(pic_team)
+            if pic_team_error:
+                return jsonify({'error': 'Invalid PIC team', 'message': pic_team_error}), 400
+            if pic_team != job.pic_team:
+                job.pic_team = pic_team
+                needs_scheduler_update = True
         
         # Update email notification settings if provided
         if 'enable_email_notifications' in data:
@@ -1105,6 +1320,13 @@ def update_job(job_id):
                 job.is_active = new_status
                 needs_scheduler_update = True
                 status_changed = True
+
+        # Guard: cannot (re)enable a job after its end_date.
+        if job.is_active and job.end_date and job.end_date < _today_jst():
+            return jsonify({
+                'error': 'Job expired',
+                'message': 'Job cannot be enabled after end_date has passed. Update end_date first.',
+            }), 400
         
         # Validate at least one target exists
         if not job.target_url and not (job.github_owner and job.github_repo and job.github_workflow_name):
@@ -1125,7 +1347,7 @@ def update_job(job_id):
                     scheduler.remove_job(job_id)
                 
                 # Add updated job if active
-                if job.is_active:
+                if job.is_active and not (job.end_date and job.end_date < _today_jst()):
                     trigger = CronTrigger.from_crontab(job.cron_expression, timezone=scheduler_tz)
                     job_config = {
                         'target_url': job.target_url,
@@ -1297,6 +1519,21 @@ def execute_job_now(job_id):
         # Authorization: admin can execute any; users can execute own jobs
         if not can_modify_job(job):
             return jsonify({'error': 'Insufficient permissions', 'message': 'You can only execute your own jobs'}), 403
+
+        # Guard against executing jobs after end_date
+        if job.end_date and job.end_date < _today_jst():
+            if job.is_active:
+                job.is_active = False
+                db.session.commit()
+                try:
+                    if scheduler.get_job(job.id):
+                        scheduler.remove_job(job.id)
+                except Exception:
+                    pass
+            return jsonify({
+                'error': 'Job expired',
+                'message': 'This job has passed its end_date and was auto-paused.',
+            }), 400
 
         data = request.get_json(silent=True) or {}
         if not isinstance(data, dict):

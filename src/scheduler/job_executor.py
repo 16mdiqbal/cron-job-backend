@@ -2,9 +2,14 @@ import logging
 import requests
 import os
 from datetime import datetime, timezone
+from zoneinfo import ZoneInfo
+from flask import current_app
 from ..models import db, JobExecution
+from ..models.job import Job
+from ..models.user import User
 from ..utils.email import send_job_failure_notification, send_job_success_notification
 from ..utils.notifications import broadcast_job_success, broadcast_job_failure
+from ..services.end_date_maintenance import run_end_date_maintenance
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +32,17 @@ def execute_job_with_app_context(job_id, job_name, job_config):
         raise RuntimeError("Flask app not set for scheduler. Call set_flask_app(app) during startup.")
     with _flask_app.app_context():
         execute_job(job_id, job_name, job_config, trigger_type='scheduled')
+
+
+def run_end_date_maintenance_with_app_context():
+    """
+    APScheduler entrypoint for weekly end_date reminders / auto-pause.
+    """
+    if _flask_app is None:
+        raise RuntimeError("Flask app not set for scheduler. Call set_flask_app(app) during startup.")
+    with _flask_app.app_context():
+        from ..scheduler import scheduler  # local import to avoid cycles
+        run_end_date_maintenance(_flask_app, scheduler=scheduler)
 
 
 def execute_job(job_id, job_name, job_config, trigger_type='scheduled'):
@@ -53,6 +69,49 @@ def execute_job(job_id, job_name, job_config, trigger_type='scheduled'):
         trigger_type (str): Type of trigger ('scheduled' or 'manual')
     """
     logger.info(f"Executing job '{job_name}' (ID: {job_id}) at {datetime.now(timezone.utc).isoformat()}")
+
+    # Guard: skip executions for paused/expired jobs (auto-pause on first trigger after end_date).
+    try:
+        job = Job.query.get(job_id)
+        if not job or not job.is_active:
+            logger.info(f"Skipping execution for inactive/missing job '{job_name}' (ID: {job_id})")
+            return
+
+        tz_name = current_app.config.get('SCHEDULER_TIMEZONE', 'Asia/Tokyo')
+        today_jst = datetime.now(ZoneInfo(tz_name)).date()
+        if job.end_date and job.end_date < today_jst:
+            job.is_active = False
+            db.session.commit()
+            try:
+                from ..scheduler import scheduler
+                if scheduler.get_job(job.id):
+                    scheduler.remove_job(job.id)
+            except Exception:
+                pass
+
+            recipients: set[str] = set()
+            if job.created_by:
+                recipients.add(job.created_by)
+            for admin in User.query.filter_by(role='admin', is_active=True).all():
+                recipients.add(admin.id)
+
+            for user_id in recipients:
+                try:
+                    from ..utils.notifications import create_notification
+                    create_notification(
+                        user_id=user_id,
+                        title='Job auto-paused (end date passed)',
+                        message=f'Job \"{job.name}\" passed its end_date ({job.end_date.isoformat()} JST) and was auto-paused.',
+                        notification_type='warning',
+                        related_job_id=job.id,
+                    )
+                except Exception:
+                    pass
+
+            logger.info(f"Auto-paused expired job '{job.name}' (ID: {job.id}) during execution guard")
+            return
+    except Exception as e:
+        logger.warning(f"End-date guard failed for job '{job_name}' (ID: {job_id}): {e}")
     
     # Create execution record
     execution = JobExecution(job_id=job_id, trigger_type=trigger_type, status='running')
