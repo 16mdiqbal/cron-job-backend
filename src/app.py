@@ -1,12 +1,16 @@
 import logging
 import os
+import atexit
+import threading
+import time
+from typing import Optional
 from flask import Flask
 from flask_cors import CORS
 from flask_jwt_extended import JWTManager
 from datetime import datetime, timedelta
 from apscheduler.triggers.cron import CronTrigger
 from zoneinfo import ZoneInfo
-from .config import Config
+from .config import Config, DB_PATH
 from .models import db
 from .models.job import Job
 from .utils.email import mail
@@ -30,6 +34,76 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+_SCHEDULER_LOCK_PATH: Optional[str] = None
+_SCHEDULER_LOCK_HELD = False
+
+
+def _is_process_alive(pid: int) -> bool:
+    try:
+        if pid <= 0:
+            return False
+        # Works on Unix/macOS. On Windows, this may raise.
+        os.kill(pid, 0)
+        return True
+    except Exception:
+        return False
+
+
+def _acquire_scheduler_lock() -> bool:
+    """
+    Prevent multiple backend processes from running the scheduler concurrently.
+    Uses a lock file under src/instance with stale-PID detection.
+    """
+    global _SCHEDULER_LOCK_PATH, _SCHEDULER_LOCK_HELD
+
+    lock_dir = os.path.dirname(DB_PATH)
+    os.makedirs(lock_dir, exist_ok=True)
+    lock_path = os.path.join(lock_dir, "scheduler.lock")
+    _SCHEDULER_LOCK_PATH = lock_path
+
+    # If lock exists, check whether it's stale.
+    try:
+        if os.path.exists(lock_path):
+            try:
+                with open(lock_path, "r", encoding="utf-8") as f:
+                    first_line = (f.readline() or "").strip()
+                existing_pid = int(first_line) if first_line.isdigit() else None
+            except Exception:
+                existing_pid = None
+
+            if existing_pid and _is_process_alive(existing_pid):
+                return False
+
+            # Stale lock: best-effort remove.
+            try:
+                os.remove(lock_path)
+            except Exception:
+                return False
+
+        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(f"{os.getpid()}\n{datetime.utcnow().isoformat()}Z\n")
+        _SCHEDULER_LOCK_HELD = True
+        return True
+    except FileExistsError:
+        return False
+    except Exception:
+        return False
+
+
+def _release_scheduler_lock():
+    global _SCHEDULER_LOCK_HELD
+    if not _SCHEDULER_LOCK_HELD:
+        return
+    _SCHEDULER_LOCK_HELD = False
+    try:
+        if _SCHEDULER_LOCK_PATH and os.path.exists(_SCHEDULER_LOCK_PATH):
+            os.remove(_SCHEDULER_LOCK_PATH)
+    except Exception:
+        pass
+
+
+atexit.register(_release_scheduler_lock)
 
 
 def _get_scheduler_timezone(app: Flask):
@@ -39,6 +113,113 @@ def _get_scheduler_timezone(app: Flask):
     except Exception:
         logger.warning(f"Invalid SCHEDULER_TIMEZONE '{tz_name}', falling back to UTC")
         return ZoneInfo('UTC')
+
+
+def _job_signature(job: Job) -> str:
+    updated_at = job.updated_at.isoformat() if getattr(job, "updated_at", None) else ""
+    return "|".join(
+        [
+            job.id or "",
+            job.name or "",
+            job.cron_expression or "",
+            str(bool(job.is_active)),
+            job.end_date.isoformat() if job.end_date else "",
+            job.target_url or "",
+            job.github_owner or "",
+            job.github_repo or "",
+            job.github_workflow_name or "",
+            str(bool(job.enable_email_notifications)),
+            ",".join(job.get_notification_emails() or []),
+            str(bool(job.notify_on_success)),
+            updated_at,
+        ]
+    )
+
+
+def _sync_jobs_to_scheduler(app: Flask, scheduler_tz: ZoneInfo, signatures: dict[str, str]):
+    """
+    Periodically reconcile jobs table -> APScheduler state.
+    This keeps the system correct even if API requests hit a non-scheduler process
+    (e.g., multiple gunicorn workers/instances).
+    """
+    with app.app_context():
+        today_jst = datetime.now(scheduler_tz).date()
+        all_jobs = Job.query.all()
+        current_ids = {j.id for j in all_jobs if j.id}
+
+        # Remove deleted jobs
+        for job_id in list(signatures.keys()):
+            if job_id not in current_ids:
+                try:
+                    if scheduler.get_job(job_id):
+                        scheduler.remove_job(job_id)
+                except Exception:
+                    pass
+                signatures.pop(job_id, None)
+
+        for job in all_jobs:
+            if not job.id:
+                continue
+
+            # Auto-pause expired jobs
+            if job.is_active and job.end_date and job.end_date < today_jst:
+                job.is_active = False
+                db.session.add(job)
+                db.session.commit()
+
+            should_schedule = bool(job.is_active) and not (job.end_date and job.end_date < today_jst)
+            sig = _job_signature(job)
+            prev = signatures.get(job.id)
+
+            if not should_schedule:
+                if prev is not None:
+                    try:
+                        if scheduler.get_job(job.id):
+                            scheduler.remove_job(job.id)
+                    except Exception:
+                        pass
+                    signatures.pop(job.id, None)
+                continue
+
+            if prev == sig and scheduler.get_job(job.id):
+                continue
+
+            # Replace existing schedule
+            try:
+                if scheduler.get_job(job.id):
+                    scheduler.remove_job(job.id)
+            except Exception:
+                pass
+
+            try:
+                trigger = CronTrigger.from_crontab(job.cron_expression, timezone=scheduler_tz)
+            except Exception as e:
+                logger.error(f"Invalid cron for job '{job.name}' (ID: {job.id}): {e}")
+                continue
+
+            job_config = {
+                'target_url': job.target_url,
+                'github_owner': job.github_owner,
+                'github_repo': job.github_repo,
+                'github_workflow_name': job.github_workflow_name,
+                'metadata': job.get_metadata(),
+                'enable_email_notifications': job.enable_email_notifications,
+                'notification_emails': job.get_notification_emails(),
+                'notify_on_success': job.notify_on_success
+            }
+
+            try:
+                scheduler.add_job(
+                    func=execute_job_with_app_context,
+                    trigger=trigger,
+                    args=[job.id, job.name, job_config],
+                    id=job.id,
+                    name=job.name,
+                    replace_existing=True
+                )
+                signatures[job.id] = sig
+            except Exception as e:
+                logger.error(f"Failed to schedule job '{job.name}' (ID: {job.id}): {e}")
 
 
 def _validate_production_config(app: Flask):
@@ -148,6 +329,11 @@ def create_app():
     scheduler_enabled = os.getenv('SCHEDULER_ENABLED', 'true').lower() != 'false'
     
     if scheduler_enabled:
+        if not _acquire_scheduler_lock():
+            logger.warning("Scheduler lock is held by another process; skipping APScheduler startup in this process.")
+            scheduler_enabled = False
+
+    if scheduler_enabled:
         scheduler_tz = _get_scheduler_timezone(app)
         scheduler.configure(
             jobstores=app.config['SCHEDULER_JOBSTORES'],
@@ -156,41 +342,9 @@ def create_app():
             timezone=scheduler_tz
         )
 
-        # Load existing jobs from database into scheduler
-        with app.app_context():
-            today_jst = datetime.now(scheduler_tz).date()
-            existing_jobs = Job.query.filter_by(is_active=True).all()
-            for job in existing_jobs:
-                try:
-                    # Auto-pause expired jobs (quietly) to prevent unexpected executions
-                    if job.end_date and job.end_date < today_jst:
-                        job.is_active = False
-                        db.session.commit()
-                        logger.info(f"Auto-paused expired job '{job.name}' (ID: {job.id}) due to end_date")
-                        continue
-
-                    trigger = CronTrigger.from_crontab(job.cron_expression, timezone=scheduler_tz)
-                    job_config = {
-                        'target_url': job.target_url,
-                        'github_owner': job.github_owner,
-                        'github_repo': job.github_repo,
-                        'github_workflow_name': job.github_workflow_name,
-                        'metadata': job.get_metadata(),
-                        'enable_email_notifications': job.enable_email_notifications,
-                        'notification_emails': job.get_notification_emails(),
-                        'notify_on_success': job.notify_on_success
-                    }
-                    scheduler.add_job(
-                        func=execute_job_with_app_context,
-                        trigger=trigger,
-                        args=[job.id, job.name, job_config],
-                        id=job.id,
-                        name=job.name,
-                        replace_existing=True
-                    )
-                    logger.info(f"Loaded job '{job.name}' (ID: {job.id}) into scheduler")
-                except Exception as e:
-                    logger.error(f"Failed to load job '{job.name}': {str(e)}")
+        # Initial load + periodic sync from DB -> scheduler
+        signatures: dict[str, str] = {}
+        _sync_jobs_to_scheduler(app, scheduler_tz, signatures)
 
         # Weekly maintenance: end_date reminders + auto-pause (Mondays, JST)
         try:
@@ -207,6 +361,20 @@ def create_app():
         if not scheduler.running:
             scheduler.start()
             logger.info("APScheduler started successfully")
+
+        poll_seconds = int(os.getenv("SCHEDULER_POLL_SECONDS", "60"))
+        poll_seconds = max(10, min(poll_seconds, 300))
+
+        def _sync_loop():
+            while True:
+                time.sleep(poll_seconds)
+                try:
+                    _sync_jobs_to_scheduler(app, scheduler_tz, signatures)
+                except Exception as e:
+                    logger.error(f"Scheduler sync loop error: {e}")
+
+        t = threading.Thread(target=_sync_loop, name="scheduler-sync", daemon=True)
+        t.start()
 
     # Register Blueprints
     app.register_blueprint(auth_bp)
