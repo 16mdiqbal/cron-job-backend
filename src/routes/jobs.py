@@ -7,6 +7,7 @@ import re
 from datetime import datetime, date, time, timezone, timedelta
 from typing import Optional, Dict, List
 from urllib.parse import urlparse
+import requests
 from flask import Blueprint, request, jsonify, current_app
 from flask_jwt_extended import jwt_required, get_jwt, get_jwt_identity
 from croniter import croniter
@@ -136,6 +137,39 @@ def _parse_iso_date_or_datetime(value: Optional[str]) -> Optional[datetime]:
     else:
         dt = dt.astimezone(timezone.utc)
     return dt
+
+
+def _cron_validation_error(expression: str) -> Optional[str]:
+    expr = (expression or '').strip()
+    if not expr:
+        return 'Cron expression is required.'
+
+    # UI convention: 5-field crontab (minute hour day month day-of-week)
+    parts = expr.split()
+    if len(parts) != 5:
+        return 'Cron expression must have exactly 5 fields (minute hour day month day-of-week).'
+
+    try:
+        CronTrigger.from_crontab(expr, timezone=_get_scheduler_timezone())
+    except Exception as e:
+        return str(e) or 'Invalid cron expression.'
+    return None
+
+
+def _cron_next_runs(expression: str, count: int = 5) -> List[str]:
+    scheduler_tz = _get_scheduler_timezone()
+    trigger = CronTrigger.from_crontab((expression or '').strip(), timezone=scheduler_tz)
+    now = datetime.now(scheduler_tz)
+    prev = None
+    runs: List[str] = []
+    for _ in range(max(0, min(int(count or 0), 20))):
+        nxt = trigger.get_next_fire_time(prev, now)
+        if not nxt:
+            break
+        runs.append(nxt.isoformat())
+        prev = nxt
+        now = nxt
+    return runs
 
 
 def _slugify(value: str) -> str:
@@ -286,6 +320,130 @@ def delete_job_category(category_id):
     return jsonify({'message': 'Category disabled', 'category': category.to_dict()}), 200
 
 
+@jobs_bp.route('/jobs/validate-cron', methods=['POST'])
+@jwt_required()
+def validate_cron_expression():
+    """
+    Validate cron expression and return an explanatory message.
+    """
+    if not request.is_json:
+        return jsonify({'error': 'Content-Type must be application/json'}), 400
+    data = request.get_json(silent=True) or {}
+    expression = (data.get('expression') or data.get('cron_expression') or '').strip()
+
+    err = _cron_validation_error(expression)
+    if err:
+        return jsonify({'valid': False, 'error': 'Invalid cron expression', 'message': err}), 200
+    return jsonify({'valid': True, 'message': 'Valid cron expression'}), 200
+
+
+@jobs_bp.route('/jobs/cron-preview', methods=['POST'])
+@jwt_required()
+def cron_preview():
+    """
+    Return the next N run times for a cron expression (JST by default).
+    """
+    if not request.is_json:
+        return jsonify({'error': 'Content-Type must be application/json'}), 400
+    data = request.get_json(silent=True) or {}
+    expression = (data.get('expression') or data.get('cron_expression') or '').strip()
+    count = data.get('count') or 5
+
+    err = _cron_validation_error(expression)
+    if err:
+        return jsonify({'error': 'Invalid cron expression', 'message': err}), 400
+
+    tz = current_app.config.get('SCHEDULER_TIMEZONE', 'Asia/Tokyo')
+    runs = _cron_next_runs(expression, count=int(count))
+    return jsonify({'timezone': tz, 'next_runs': runs, 'count': len(runs)}), 200
+
+
+@jobs_bp.route('/jobs/test-run', methods=['POST'])
+@jwt_required()
+@role_required('admin', 'user')
+def test_run_job():
+    """
+    Execute a one-off test run for the given job configuration WITHOUT creating a Job or JobExecution.
+    Keeps the app quiet: no persisted executions, no notifications.
+    """
+    if not request.is_json:
+        return jsonify({'error': 'Content-Type must be application/json'}), 400
+    data = request.get_json(silent=True) or {}
+
+    target_url = (data.get('target_url') or '').strip() or None
+    github_owner = (data.get('github_owner') or '').strip() or None
+    github_repo = (data.get('github_repo') or '').strip() or None
+    github_workflow_name = (data.get('github_workflow_name') or '').strip() or None
+    metadata = data.get('metadata') or {}
+    if metadata and not isinstance(metadata, dict):
+        return jsonify({'error': 'Invalid metadata', 'message': '"metadata" must be an object.'}), 400
+
+    if not target_url and not (github_owner and github_repo and github_workflow_name):
+        return jsonify({
+            'error': 'Missing target configuration',
+            'message': 'Provide target_url or GitHub config (github_owner, github_repo, github_workflow_name).'
+        }), 400
+
+    timeout_seconds = float(data.get('timeout_seconds') or 10)
+    timeout_seconds = max(1.0, min(timeout_seconds, 30.0))
+
+    if target_url:
+        parsed = urlparse(target_url)
+        if parsed.scheme not in {'http', 'https'}:
+            return jsonify({'error': 'Invalid target_url', 'message': 'Webhook URL must start with http:// or https://'}), 400
+        try:
+            resp = requests.post(target_url, json=metadata or {}, timeout=timeout_seconds)
+            ok = 200 <= resp.status_code < 300
+            return jsonify({
+                'ok': ok,
+                'type': 'webhook',
+                'status_code': resp.status_code,
+                'message': 'Webhook test run succeeded.' if ok else 'Webhook test run failed.',
+            }), 200
+        except Exception as e:
+            return jsonify({'ok': False, 'type': 'webhook', 'error': 'Request failed', 'message': str(e)}), 200
+
+    token = (os.getenv('GITHUB_TOKEN') or '').strip()
+    if not token:
+        return jsonify({
+            'ok': False,
+            'type': 'github',
+            'error': 'GitHub token not configured',
+            'message': 'Set GITHUB_TOKEN in backend .env to test-run GitHub workflows.',
+        }), 200
+
+    ref = None
+    if isinstance(metadata, dict):
+        ref = (metadata.get('ref') or metadata.get('branch') or '').strip() or None
+    ref = ref or 'main'
+
+    dispatch_url = f'https://api.github.com/repos/{github_owner}/{github_repo}/actions/workflows/{github_workflow_name}/dispatches'
+    payload = {'ref': ref}
+    if metadata:
+        payload['inputs'] = metadata
+
+    try:
+        resp = requests.post(
+            dispatch_url,
+            headers={
+                'Authorization': f'Bearer {token}',
+                'Accept': 'application/vnd.github+json',
+                'X-GitHub-Api-Version': '2022-11-28',
+            },
+            json=payload,
+            timeout=timeout_seconds,
+        )
+        ok = resp.status_code in {201, 204}
+        return jsonify({
+            'ok': ok,
+            'type': 'github',
+            'status_code': resp.status_code,
+            'message': 'GitHub workflow dispatch triggered.' if ok else 'GitHub workflow dispatch failed.',
+        }), 200
+    except Exception as e:
+        return jsonify({'ok': False, 'type': 'github', 'error': 'Request failed', 'message': str(e)}), 200
+
+
 @jobs_bp.route('/jobs', methods=['POST'])
 @jwt_required()
 @role_required('admin', 'user')
@@ -343,10 +501,11 @@ def create_job():
             }), 400
 
         # Validate cron expression
-        if not croniter.is_valid(cron_expression):
+        cron_err = _cron_validation_error(cron_expression)
+        if cron_err:
             return jsonify({
                 'error': 'Invalid cron expression',
-                'message': 'Please provide a valid cron expression (e.g., "*/5 * * * *" for every 5 minutes)'
+                'message': cron_err
             }), 400
 
         # Optional fields
@@ -552,8 +711,9 @@ def bulk_upload_jobs():
                 errors.append({'row': row_index, 'job_name': name, 'error': 'Duplicate job name', 'message': f'A job with the name "{name}" already exists.'})
                 continue
 
-            if not croniter.is_valid(cron_expression):
-                errors.append({'row': row_index, 'job_name': name, 'error': 'Invalid cron expression'})
+            cron_err = _cron_validation_error(cron_expression)
+            if cron_err:
+                errors.append({'row': row_index, 'job_name': name, 'error': 'Invalid cron expression', 'message': cron_err})
                 continue
 
             is_active = _status_to_active(status)
@@ -863,10 +1023,11 @@ def update_job(job_id):
         # Update cron expression if provided
         if 'cron_expression' in data:
             new_cron = data['cron_expression'].strip()
-            if not croniter.is_valid(new_cron):
+            cron_err = _cron_validation_error(new_cron)
+            if cron_err:
                 return jsonify({
                     'error': 'Invalid cron expression',
-                    'message': 'Please provide a valid cron expression'
+                    'message': cron_err
                 }), 400
             if new_cron != job.cron_expression:
                 job.cron_expression = new_cron
@@ -1263,7 +1424,11 @@ def get_job_executions(job_id):
         
         # Apply filters
         if status:
-            query = query.filter_by(status=status)
+            statuses = [s.strip() for s in status.split(',') if s.strip()]
+            if len(statuses) == 1:
+                query = query.filter_by(status=statuses[0])
+            elif len(statuses) > 1:
+                query = query.filter(JobExecution.status.in_(statuses))
         if trigger_type:
             query = query.filter_by(trigger_type=trigger_type)
         if from_dt:
@@ -1410,7 +1575,7 @@ def list_executions():
         - page (optional): Page number (default: 1)
         - limit (optional): Page size (default: 20, max: 200)
         - job_id (optional): Filter by job_id
-        - status (optional): success|failed|running
+        - status (optional): success|failed|running (or comma-separated list)
         - trigger_type (optional): scheduled|manual
         - execution_type (optional): github_actions|webhook
         - from (optional): ISO date/datetime (inclusive, based on started_at)
@@ -1440,7 +1605,11 @@ def list_executions():
         if job_id:
             query = query.filter(JobExecution.job_id == job_id)
         if status:
-            query = query.filter(JobExecution.status == status)
+            statuses = [s.strip() for s in status.split(',') if s.strip()]
+            if len(statuses) == 1:
+                query = query.filter(JobExecution.status == statuses[0])
+            elif len(statuses) > 1:
+                query = query.filter(JobExecution.status.in_(statuses))
         if trigger_type:
             query = query.filter(JobExecution.trigger_type == trigger_type)
         if execution_type:

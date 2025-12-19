@@ -316,3 +316,47 @@ def delete_notification(notification_id):
             'error': 'Internal server error',
             'message': str(e)
         }), 500
+
+
+@notifications_bp.route('/delete-read', methods=['DELETE'])
+@jwt_required()
+def delete_read_notifications():
+    """
+    Delete all read notifications for the current user (optionally within date range).
+
+    Optional query params:
+      - from: ISO date/datetime (inclusive, based on created_at)
+      - to: ISO date/datetime (exclusive, based on created_at). Date-only treated as inclusive day.
+
+    Returns:
+      200: { deleted_count }
+    """
+    try:
+        current_user_id = get_jwt_identity()
+
+        from_raw = request.args.get('from')
+        to_raw = request.args.get('to')
+        try:
+            from_dt = _parse_iso_date_or_datetime_utc_naive(from_raw)
+            to_dt = _parse_iso_date_or_datetime_utc_naive(to_raw)
+        except ValueError as e:
+            return jsonify({'error': 'Invalid date', 'message': str(e)}), 400
+        if to_raw and to_dt and len(to_raw.strip()) == 10:
+            to_dt = to_dt + timedelta(days=1)
+        if from_dt and to_dt and from_dt >= to_dt:
+            return jsonify({'error': 'Invalid date range', 'message': '"from" must be earlier than "to".'}), 400
+
+        query = Notification.query.filter_by(user_id=current_user_id, is_read=True)
+        if from_dt:
+            query = query.filter(Notification.created_at >= from_dt)
+        if to_dt:
+            query = query.filter(Notification.created_at < to_dt)
+
+        deleted_count = query.delete(synchronize_session=False)
+        db.session.commit()
+
+        return jsonify({'deleted_count': deleted_count}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error deleting read notifications: {str(e)}")
+        return jsonify({'error': 'Internal server error', 'message': str(e)}), 500
