@@ -1,11 +1,15 @@
 import logging
 from datetime import datetime, timedelta
+from typing import Optional
 from zoneinfo import ZoneInfo
 
 from ..models import db
 from ..models.job import Job
+from ..models.pic_team import PicTeam
+from ..models.slack_settings import SlackSettings
 from ..models.user import User
 from ..utils.notifications import create_notification
+from ..utils.slack import send_slack_message
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +55,30 @@ def run_end_date_maintenance(app, scheduler=None):
       - Auto-pause jobs whose end_date has passed (quietly, but with a warning notification)
       - Remind about jobs ending within 30 days (weekly warning notification)
 
-    Slack integration is intentionally deferred; this uses in-app notifications.
+    Sends in-app notifications always; optionally sends Slack when configured in Settings.
     """
-    tz_name = _scheduler_timezone_name(app)
     now = _now_jst(app)
     today = now.date()
     cutoff = today + timedelta(days=30)
+
+    slack = SlackSettings.query.first()
+    slack_enabled = bool(getattr(slack, 'is_enabled', False) and getattr(slack, 'webhook_url', None))
+    slack_webhook = getattr(slack, 'webhook_url', None) if slack_enabled else None
+    slack_channel = getattr(slack, 'channel', None) if slack_enabled else None
+    frontend_base_url = (app.config.get('FRONTEND_BASE_URL') or 'http://localhost:5173').rstrip('/')
+
+    def _team_handle(job: Job) -> Optional[str]:
+        if not job.pic_team:
+            return None
+        team = PicTeam.query.filter_by(slug=job.pic_team).first()
+        return (team.slack_handle or '').strip() if team else None
+
+    def _job_link(job: Job) -> str:
+        return f"{frontend_base_url}/jobs/{job.id}/edit"
+
+    def _slack_post(text: str):
+        if slack_webhook:
+            send_slack_message(slack_webhook, text=text, channel=slack_channel)
 
     # 1) Auto-pause expired jobs that are still active
     expired_active = (
@@ -78,6 +100,13 @@ def run_end_date_maintenance(app, scheduler=None):
             title='Job auto-paused (end date passed)',
             message=f'Job "{job.name}" passed its end_date ({job.end_date.isoformat()} JST) and was auto-paused. PIC Team: {job.pic_team or "-"}',
         )
+        if slack_enabled:
+            handle = _team_handle(job)
+            mention = f"{handle} " if handle else ""
+            _slack_post(
+                f":warning: {mention}Job auto-paused (end date passed): <{_job_link(job)}|{job.name}> "
+                f"(end_date {job.end_date.isoformat()} JST)"
+            )
 
     # 2) Weekly reminders for jobs ending soon (0..30 days)
     ending_soon = (
@@ -93,6 +122,12 @@ def run_end_date_maintenance(app, scheduler=None):
             title='Job ending soon',
             message=f'Job "{job.name}" ends on {job.end_date.isoformat()} JST ({days_left} day(s) left). PIC Team: {job.pic_team or "-"}',
         )
+        if slack_enabled:
+            handle = _team_handle(job)
+            mention = f"{handle} " if handle else ""
+            _slack_post(
+                f":warning: {mention}Job ending soon ({days_left}d): <{_job_link(job)}|{job.name}> "
+                f"(end_date {job.end_date.isoformat()} JST)"
+            )
 
     db.session.commit()
-

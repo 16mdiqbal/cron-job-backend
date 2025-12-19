@@ -38,6 +38,15 @@ def ensure_sqlite_schema(db):
                 conn.execute(text('ALTER TABLE jobs ADD COLUMN pic_team VARCHAR(100)'))
                 logger.info("✅ SQLite migration: added jobs.pic_team")
 
+            # Pic teams table evolves too (admin-managed; created via create_all)
+            try:
+                pic_team_cols = _get_sqlite_columns(conn, 'pic_teams')
+                if 'slack_handle' not in pic_team_cols:
+                    conn.execute(text('ALTER TABLE pic_teams ADD COLUMN slack_handle VARCHAR(255)'))
+                    logger.info("✅ SQLite migration: added pic_teams.slack_handle")
+            except Exception:
+                # Table may not exist yet in a fresh DB before create_all, or could be absent in tests.
+                pass
+
     except Exception as e:
         logger.warning(f"SQLite schema ensure skipped/failed: {e}")
-

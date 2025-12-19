@@ -10,4 +10,5 @@ from .pic_team import PicTeam
 from .job_execution import JobExecution
 from .notification_preferences import UserNotificationPreferences
 from .ui_preferences import UserUiPreferences
+from .slack_settings import SlackSettings
 from .notification import Notification

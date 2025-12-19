@@ -20,6 +20,7 @@ from ..models.job import Job
 from ..models.job_category import JobCategory
 from ..models.pic_team import PicTeam
 from ..models.job_execution import JobExecution
+from ..models.slack_settings import SlackSettings
 from ..scheduler import scheduler
 from ..scheduler.job_executor import execute_job, execute_job_with_app_context, trigger_job_manually
 from ..utils.auth import role_required, get_current_user, can_modify_job, is_admin
@@ -264,6 +265,51 @@ def _validate_pic_team_slug(slug: Optional[str]) -> Optional[str]:
     return None
 
 
+def _get_or_create_slack_settings() -> SlackSettings:
+    settings = SlackSettings.query.first()
+    if not settings:
+        settings = SlackSettings(is_enabled=False, webhook_url=None, channel=None)
+        db.session.add(settings)
+        db.session.commit()
+    return settings
+
+
+@jobs_bp.route('/settings/slack', methods=['GET'])
+@jwt_required()
+@role_required('admin')
+def get_slack_settings():
+    settings = _get_or_create_slack_settings()
+    return jsonify({'slack_settings': settings.to_dict()}), 200
+
+
+@jobs_bp.route('/settings/slack', methods=['PUT'])
+@jwt_required()
+@role_required('admin')
+def update_slack_settings():
+    if not request.is_json:
+        return jsonify({'error': 'Content-Type must be application/json'}), 400
+
+    data = request.get_json(silent=True) or {}
+    settings = _get_or_create_slack_settings()
+
+    if 'is_enabled' in data:
+        settings.is_enabled = bool(data.get('is_enabled'))
+
+    if 'webhook_url' in data:
+        webhook_url = (data.get('webhook_url') or '').strip()
+        settings.webhook_url = webhook_url or None
+
+    if 'channel' in data:
+        channel = (data.get('channel') or '').strip()
+        settings.channel = channel or None
+
+    if settings.is_enabled and not settings.webhook_url:
+        return jsonify({'error': 'Invalid settings', 'message': 'webhook_url is required when Slack is enabled.'}), 400
+
+    db.session.commit()
+    return jsonify({'message': 'Slack settings updated', 'slack_settings': settings.to_dict()}), 200
+
+
 @jobs_bp.route('/job-categories', methods=['GET'])
 @jwt_required()
 def list_job_categories():
@@ -405,7 +451,11 @@ def create_pic_team():
     if PicTeam.query.filter_by(slug=slug).first():
         return jsonify({'error': 'Duplicate slug', 'message': f'PIC team slug "{slug}" already exists.'}), 409
 
-    team = PicTeam(slug=slug, name=name, is_active=True)
+    slack_handle = (data.get('slack_handle') or '').strip()
+    if not slack_handle:
+        return jsonify({'error': 'Missing required fields', 'message': '"slack_handle" is required.'}), 400
+
+    team = PicTeam(slug=slug, name=name, slack_handle=slack_handle, is_active=True)
     db.session.add(team)
     db.session.commit()
     return jsonify({'message': 'PIC team created', 'pic_team': team.to_dict()}), 201
@@ -454,6 +504,12 @@ def update_pic_team(team_id):
 
     if 'is_active' in data:
         team.is_active = bool(data.get('is_active'))
+
+    if 'slack_handle' in data:
+        slack_handle = (data.get('slack_handle') or '').strip()
+        if not slack_handle:
+            return jsonify({'error': 'Invalid slack_handle', 'message': 'slack_handle cannot be empty.'}), 400
+        team.slack_handle = slack_handle
 
     db.session.commit()
     return jsonify({'message': 'PIC team updated', 'pic_team': team.to_dict(), 'jobs_updated': jobs_updated}), 200
