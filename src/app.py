@@ -41,6 +41,29 @@ def _get_scheduler_timezone(app: Flask):
         return ZoneInfo('UTC')
 
 
+def _validate_production_config(app: Flask):
+    """
+    Fail fast on unsafe production defaults.
+    Keep dev experience flexible, but make production explicit and safe.
+    """
+    if app.config.get('FLASK_ENV') != 'production':
+        return
+
+    secret_key = (app.config.get('SECRET_KEY') or '').strip()
+    jwt_secret = (app.config.get('JWT_SECRET_KEY') or '').strip()
+    cors_origins = [o.strip() for o in (app.config.get('CORS_ORIGINS') or []) if o and o.strip()]
+
+    if not secret_key or secret_key == 'dev-secret-key-please-change-in-production':
+        raise RuntimeError('Invalid production config: set a strong SECRET_KEY (do not use the default dev value).')
+
+    if not jwt_secret or jwt_secret in ['dev-secret-key-please-change-in-production', secret_key]:
+        # Allow JWT_SECRET_KEY == SECRET_KEY in dev, but require explicit and distinct in prod.
+        raise RuntimeError('Invalid production config: set a strong, distinct JWT_SECRET_KEY.')
+
+    if not cors_origins or '*' in cors_origins:
+        raise RuntimeError('Invalid production config: set CORS_ORIGINS to explicit frontend origin(s); "*" is not allowed.')
+
+
 def create_app():
     """
     Application factory pattern for creating and configuring the Flask app.
@@ -48,6 +71,7 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
     set_flask_app(app)
+    _validate_production_config(app)
 
     # Initialize CORS
     CORS(app, resources={
@@ -98,24 +122,27 @@ def create_app():
             logger.error(f"Error seeding job categories: {str(e)}")
             db.session.rollback()
         
-        # Create default admin user if it doesn't exist
-        admin = User.query.filter_by(username='admin').first()
-        if not admin:
-            try:
-                admin = User(
-                    username='admin',
-                    email='admin@example.com',
-                    role='admin',
-                    is_active=True
-                )
-                admin.set_password('admin123')
-                db.session.add(admin)
-                db.session.commit()
-                logger.info("✅ Default admin user created successfully")
-                logger.warning("⚠️  Default admin password is 'admin123'. Change it immediately!")
-            except Exception as e:
-                logger.error(f"Error creating default admin user: {str(e)}")
-                db.session.rollback()
+        # Create default admin user if it doesn't exist (dev-only by default)
+        if app.config.get('ALLOW_DEFAULT_ADMIN', False):
+            admin = User.query.filter_by(username='admin').first()
+            if not admin:
+                try:
+                    admin = User(
+                        username='admin',
+                        email='admin@example.com',
+                        role='admin',
+                        is_active=True
+                    )
+                    admin.set_password('admin123')
+                    db.session.add(admin)
+                    db.session.commit()
+                    logger.info("✅ Default admin user created successfully")
+                    logger.warning("⚠️  Default admin password is 'admin123'. Change it immediately!")
+                except Exception as e:
+                    logger.error(f"Error creating default admin user: {str(e)}")
+                    db.session.rollback()
+        else:
+            logger.info("Default admin auto-creation is disabled (ALLOW_DEFAULT_ADMIN=false).")
 
     # Configure and start APScheduler (unless disabled for testing)
     scheduler_enabled = os.getenv('SCHEDULER_ENABLED', 'true').lower() != 'false'

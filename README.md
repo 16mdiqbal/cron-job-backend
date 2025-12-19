@@ -137,6 +137,8 @@ pip install -r requirements.txt
 - `SCHEDULER_TIMEZONE` - Scheduler timezone (default: Asia/Tokyo)
 - `SCHEDULER_ENABLED` - Set to `false` to disable APScheduler startup (useful for scripts/tests)
 - `FRONTEND_BASE_URL` - Used to generate job links in Slack messages (default: http://localhost:5173)
+- `EXPOSE_ERROR_DETAILS` - When `true`, API error responses include exception details (default: true in dev, false in production)
+- `ALLOW_DEFAULT_ADMIN` - When `true`, auto-creates default `admin/admin123` if missing (default: true in dev, false in production)
 
 ## Notes / Behavior
 

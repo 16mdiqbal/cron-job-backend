@@ -6,6 +6,7 @@ from ..models.user import User
 from ..models.notification_preferences import UserNotificationPreferences
 from ..models.ui_preferences import UserUiPreferences
 from ..utils.auth import role_required
+from ..utils.api_errors import safe_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -103,7 +104,7 @@ def register():
         logger.error(f"Error registering user: {str(e)}")
         return jsonify({
             'error': 'Internal server error',
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -194,7 +195,7 @@ def login():
         logger.error(f"Error during login: {str(e)}")
         return jsonify({
             'error': 'Internal server error',
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -239,7 +240,7 @@ def refresh():
         logger.error(f"Error refreshing token: {str(e)}")
         return jsonify({
             'error': 'Internal server error',
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -273,7 +274,7 @@ def get_current_user():
         logger.error(f"Error getting current user: {str(e)}")
         return jsonify({
             'error': 'Internal server error',
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -305,7 +306,7 @@ def list_users():
         logger.error(f"Error listing users: {str(e)}")
         return jsonify({
             'error': 'Internal server error',
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -350,7 +351,7 @@ def get_user(user_id):
         logger.error(f"Error getting user: {str(e)}")
         return jsonify({
             'error': 'Internal server error',
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -464,7 +465,7 @@ def update_user(user_id):
         logger.error(f"Error updating user: {str(e)}")
         return jsonify({
             'error': 'Internal server error',
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -520,7 +521,7 @@ def delete_user(user_id):
         logger.error(f"Error deleting user: {str(e)}")
         return jsonify({
             'error': 'Internal server error',
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -581,7 +582,7 @@ def get_notification_preferences(user_id):
         logger.error(f"Error retrieving notification preferences: {str(e)}")
         return jsonify({
             'error': 'Internal server error',
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -666,7 +667,7 @@ def update_notification_preferences(user_id):
         logger.error(f"Error updating notification preferences: {str(e)}")
         return jsonify({
             'error': 'Internal server error',
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -713,7 +714,7 @@ def get_ui_preferences(user_id):
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error retrieving UI preferences: {str(e)}")
-        return jsonify({'error': 'Internal server error', 'message': str(e)}), 500
+        return jsonify({'error': 'Internal server error', 'message': safe_error_message(e)}), 500
 
 
 @auth_bp.route('/users/<user_id>/ui-preferences', methods=['PUT'])
@@ -766,8 +767,8 @@ def update_ui_preferences(user_id):
         return jsonify({'preferences': {'jobs_table_columns': normalized}}), 200
     except ValueError as e:
         db.session.rollback()
-        return jsonify({'error': 'Invalid payload', 'message': str(e)}), 400
+        return jsonify({'error': 'Invalid payload', 'message': safe_error_message(e, 'Invalid payload')}), 400
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error updating UI preferences: {str(e)}")
-        return jsonify({'error': 'Internal server error', 'message': str(e)}), 500
+        return jsonify({'error': 'Internal server error', 'message': safe_error_message(e)}), 500

@@ -19,6 +19,14 @@ class Config:
     FLASK_ENV = os.getenv('FLASK_ENV', 'development')
     DEBUG = os.getenv('FLASK_DEBUG', 'False').lower() in ['true', '1', 'yes']
 
+    # In production, avoid leaking internal exception details to clients.
+    _DEFAULT_EXPOSE_ERRORS = 'true' if FLASK_ENV != 'production' else 'false'
+    EXPOSE_ERROR_DETAILS = os.getenv('EXPOSE_ERROR_DETAILS', _DEFAULT_EXPOSE_ERRORS).lower() in ['true', '1', 'yes']
+
+    # In production, do not auto-create the default admin user at startup.
+    _DEFAULT_ALLOW_DEFAULT_ADMIN = 'true' if FLASK_ENV != 'production' else 'false'
+    ALLOW_DEFAULT_ADMIN = os.getenv('ALLOW_DEFAULT_ADMIN', _DEFAULT_ALLOW_DEFAULT_ADMIN).lower() in ['true', '1', 'yes']
+
     # JWT Configuration
     JWT_SECRET_KEY = os.getenv('JWT_SECRET_KEY', SECRET_KEY)
     JWT_ACCESS_TOKEN_EXPIRES = int(os.getenv('JWT_ACCESS_TOKEN_EXPIRES', 3600))  # 1 hour default

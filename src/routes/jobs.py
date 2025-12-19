@@ -31,6 +31,7 @@ from ..utils.notifications import (
     broadcast_job_enabled,
     broadcast_job_disabled
 )
+from ..utils.api_errors import safe_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -609,7 +610,7 @@ def test_run_job():
                 'message': 'Webhook test run succeeded.' if ok else 'Webhook test run failed.',
             }), 200
         except Exception as e:
-            return jsonify({'ok': False, 'type': 'webhook', 'error': 'Request failed', 'message': str(e)}), 200
+            return jsonify({'ok': False, 'type': 'webhook', 'error': 'Request failed', 'message': safe_error_message(e, 'Request failed')}), 200
 
     token = (os.getenv('GITHUB_TOKEN') or '').strip()
     if not token:
@@ -649,7 +650,7 @@ def test_run_job():
             'message': 'GitHub workflow dispatch triggered.' if ok else 'GitHub workflow dispatch failed.',
         }), 200
     except Exception as e:
-        return jsonify({'ok': False, 'type': 'github', 'error': 'Request failed', 'message': str(e)}), 200
+        return jsonify({'ok': False, 'type': 'github', 'error': 'Request failed', 'message': safe_error_message(e, 'Request failed')}), 200
 
 
 @jobs_bp.route('/jobs', methods=['POST'])
@@ -734,7 +735,7 @@ def create_job():
         try:
             end_date = _parse_end_date(data.get('end_date'))
         except ValueError as e:
-            return jsonify({'error': 'Invalid end_date', 'message': str(e)}), 400
+            return jsonify({'error': 'Invalid end_date', 'message': safe_error_message(e, 'Invalid end_date')}), 400
         if not end_date:
             return jsonify({'error': 'Missing required fields', 'message': '"end_date" is required (YYYY-MM-DD).'}), 400
         if end_date < _today_jst():
@@ -838,7 +839,7 @@ def create_job():
             logger.error(f"Failed to schedule job: {str(e)}")
             return jsonify({
                 'error': 'Failed to schedule job',
-                'message': str(e)
+                'message': safe_error_message(e, 'Failed to schedule job')
             }), 500
 
         return jsonify({
@@ -850,7 +851,7 @@ def create_job():
         logger.error(f"Error creating job: {str(e)}")
         return jsonify({
             'error': ERROR_INTERNAL_SERVER,
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -926,7 +927,7 @@ def bulk_upload_jobs():
             try:
                 end_date = _parse_end_date(end_date_raw)
             except ValueError as e:
-                errors.append({'row': row_index, 'job_name': name, 'error': 'Invalid end_date', 'message': str(e)})
+                errors.append({'row': row_index, 'job_name': name, 'error': 'Invalid end_date', 'message': safe_error_message(e, 'Invalid end_date')})
                 continue
             if not end_date:
                 errors.append({'row': row_index, 'job_name': name, 'error': 'Missing required fields', 'message': 'end_date (YYYY-MM-DD) is required.'})
@@ -969,7 +970,7 @@ def bulk_upload_jobs():
                 try:
                     parsed = json.loads(request_body)
                 except Exception as e:
-                    errors.append({'row': row_index, 'job_name': name, 'error': 'Invalid JSON in Request Body', 'message': str(e)})
+                    errors.append({'row': row_index, 'job_name': name, 'error': 'Invalid JSON in Request Body', 'message': safe_error_message(e, 'Invalid JSON in Request Body')})
                     continue
                 if isinstance(parsed, dict):
                     metadata = parsed
@@ -1076,7 +1077,7 @@ def bulk_upload_jobs():
             except Exception as e:
                 logger.error(f"Failed to schedule bulk job '{job.name}': {str(e)}")
                 job.is_active = False
-                scheduling_errors.append({'job_name': job.name, 'error': 'Failed to schedule job', 'message': str(e)})
+                scheduling_errors.append({'job_name': job.name, 'error': 'Failed to schedule job', 'message': safe_error_message(e, 'Failed to schedule job')})
 
         if scheduling_errors:
             db.session.commit()
@@ -1094,11 +1095,11 @@ def bulk_upload_jobs():
         }), 200
 
     except ValueError as e:
-        return jsonify({'error': 'Invalid CSV', 'message': str(e)}), 400
+        return jsonify({'error': 'Invalid CSV', 'message': safe_error_message(e, 'Invalid CSV')}), 400
     except Exception as e:
         logger.error(f"Error bulk uploading jobs: {str(e)}")
         db.session.rollback()
-        return jsonify({'error': ERROR_INTERNAL_SERVER, 'message': str(e)}), 500
+        return jsonify({'error': ERROR_INTERNAL_SERVER, 'message': safe_error_message(e)}), 500
 
 
 @jobs_bp.route('/jobs', methods=['GET'])
@@ -1148,7 +1149,7 @@ def list_jobs():
         logger.error(f"Error listing jobs: {str(e)}")
         return jsonify({
             'error': ERROR_INTERNAL_SERVER,
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -1197,7 +1198,7 @@ def get_job(job_id):
         logger.error(f"Error retrieving job {job_id}: {str(e)}")
         return jsonify({
             'error': ERROR_INTERNAL_SERVER,
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -1322,7 +1323,7 @@ def update_job(job_id):
             try:
                 parsed_end_date = _parse_end_date(data.get('end_date'))
             except ValueError as e:
-                return jsonify({'error': 'Invalid end_date', 'message': str(e)}), 400
+                return jsonify({'error': 'Invalid end_date', 'message': safe_error_message(e, 'Invalid end_date')}), 400
             if not parsed_end_date:
                 return jsonify({'error': 'Invalid end_date', 'message': 'end_date is required (YYYY-MM-DD).'}), 400
             if parsed_end_date < _today_jst():
@@ -1428,7 +1429,7 @@ def update_job(job_id):
                 logger.error(f"Failed to update scheduler for job '{job.name}': {str(e)}")
                 return jsonify({
                     'error': 'Failed to update scheduler',
-                    'message': str(e)
+                    'message': safe_error_message(e, 'Failed to update scheduler')
                 }), 500
         
         # Broadcast notification to all users about job update
@@ -1464,7 +1465,7 @@ def update_job(job_id):
         logger.error(f"Error updating job {job_id}: {str(e)}")
         return jsonify({
             'error': ERROR_INTERNAL_SERVER,
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -1545,7 +1546,7 @@ def delete_job(job_id):
         logger.error(f"Error deleting job {job_id}: {str(e)}")
         return jsonify({
             'error': ERROR_INTERNAL_SERVER,
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -1634,7 +1635,7 @@ def execute_job_now(job_id):
                 try:
                     owner, repo, workflow_name = _parse_dispatch_url(dispatch_url)
                 except ValueError as e:
-                    return jsonify({'error': 'Invalid payload', 'message': str(e)}), 400
+                    return jsonify({'error': 'Invalid payload', 'message': safe_error_message(e, 'Invalid payload')}), 400
                 base_config['github_owner'] = owner
                 base_config['github_repo'] = repo
                 base_config['github_workflow_name'] = workflow_name
@@ -1665,7 +1666,7 @@ def execute_job_now(job_id):
         return jsonify({'message': 'Job triggered successfully', 'job_id': job.id}), 200
     except Exception as e:
         logger.error(f"Error executing job {job_id}: {str(e)}")
-        return jsonify({'error': ERROR_INTERNAL_SERVER, 'message': str(e)}), 500
+        return jsonify({'error': ERROR_INTERNAL_SERVER, 'message': safe_error_message(e)}), 500
 
 
 @jobs_bp.route('/jobs/<job_id>/executions', methods=['GET'])
@@ -1743,7 +1744,7 @@ def get_job_executions(job_id):
         logger.error(f"Error fetching executions for job {job_id}: {str(e)}")
         return jsonify({
             'error': ERROR_INTERNAL_SERVER,
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -1790,7 +1791,7 @@ def get_job_execution_details(job_id, execution_id):
         logger.error(f"Error fetching execution {execution_id} for job {job_id}: {str(e)}")
         return jsonify({
             'error': ERROR_INTERNAL_SERVER,
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -1854,7 +1855,7 @@ def get_job_execution_stats(job_id):
         logger.error(f"Error fetching execution stats for job {job_id}: {str(e)}")
         return jsonify({
             'error': ERROR_INTERNAL_SERVER,
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -1938,7 +1939,7 @@ def list_executions():
         }), 200
     except Exception as e:
         logger.error(f"Error listing executions: {str(e)}")
-        return jsonify({'error': ERROR_INTERNAL_SERVER, 'message': str(e)}), 500
+        return jsonify({'error': ERROR_INTERNAL_SERVER, 'message': safe_error_message(e)}), 500
 
 
 @jobs_bp.route('/executions/<execution_id>', methods=['GET'])
@@ -1957,7 +1958,7 @@ def get_execution(execution_id):
         return jsonify({'execution': data}), 200
     except Exception as e:
         logger.error(f"Error retrieving execution {execution_id}: {str(e)}")
-        return jsonify({'error': ERROR_INTERNAL_SERVER, 'message': str(e)}), 500
+        return jsonify({'error': ERROR_INTERNAL_SERVER, 'message': safe_error_message(e)}), 500
 
 
 @jobs_bp.route('/executions/statistics', methods=['GET'])
@@ -2020,7 +2021,7 @@ def get_execution_statistics():
         }), 200
     except Exception as e:
         logger.error(f"Error getting execution statistics: {str(e)}")
-        return jsonify({'error': ERROR_INTERNAL_SERVER, 'message': str(e)}), 500
+        return jsonify({'error': ERROR_INTERNAL_SERVER, 'message': safe_error_message(e)}), 500
 
 
 @jobs_bp.route('/health', methods=['GET'])

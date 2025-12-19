@@ -7,6 +7,7 @@ from sqlalchemy import func
 from ..models import db
 from ..models.notification import Notification
 from ..models.user import User
+from ..utils.api_errors import safe_error_message
 
 logger = logging.getLogger(__name__)
 
@@ -82,7 +83,7 @@ def get_notifications():
             from_dt = _parse_iso_date_or_datetime_utc_naive(from_raw)
             to_dt = _parse_iso_date_or_datetime_utc_naive(to_raw)
         except ValueError as e:
-            return jsonify({'error': 'Invalid date', 'message': str(e)}), 400
+            return jsonify({'error': 'Invalid date', 'message': safe_error_message(e, 'Invalid date')}), 400
         if to_raw and to_dt and len(to_raw.strip()) == 10:
             to_dt = to_dt + timedelta(days=1)
         if from_dt and to_dt and from_dt >= to_dt:
@@ -121,7 +122,7 @@ def get_notifications():
         logger.error(f"Error retrieving notifications: {str(e)}")
         return jsonify({
             'error': 'Internal server error',
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -152,7 +153,7 @@ def get_unread_count():
             from_dt = _parse_iso_date_or_datetime_utc_naive(from_raw)
             to_dt = _parse_iso_date_or_datetime_utc_naive(to_raw)
         except ValueError as e:
-            return jsonify({'error': 'Invalid date', 'message': str(e)}), 400
+            return jsonify({'error': 'Invalid date', 'message': safe_error_message(e, 'Invalid date')}), 400
         if to_raw and to_dt and len(to_raw.strip()) == 10:
             to_dt = to_dt + timedelta(days=1)
         if from_dt and to_dt and from_dt >= to_dt:
@@ -177,7 +178,7 @@ def get_unread_count():
         logger.error(f"Error retrieving unread count: {str(e)}")
         return jsonify({
             'error': 'Internal server error',
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -224,7 +225,7 @@ def mark_as_read(notification_id):
         logger.error(f"Error marking notification as read: {str(e)}")
         return jsonify({
             'error': 'Internal server error',
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -267,7 +268,7 @@ def mark_all_as_read():
         logger.error(f"Error marking all notifications as read: {str(e)}")
         return jsonify({
             'error': 'Internal server error',
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -314,7 +315,7 @@ def delete_notification(notification_id):
         logger.error(f"Error deleting notification: {str(e)}")
         return jsonify({
             'error': 'Internal server error',
-            'message': str(e)
+            'message': safe_error_message(e)
         }), 500
 
 
@@ -340,7 +341,7 @@ def delete_read_notifications():
             from_dt = _parse_iso_date_or_datetime_utc_naive(from_raw)
             to_dt = _parse_iso_date_or_datetime_utc_naive(to_raw)
         except ValueError as e:
-            return jsonify({'error': 'Invalid date', 'message': str(e)}), 400
+            return jsonify({'error': 'Invalid date', 'message': safe_error_message(e, 'Invalid date')}), 400
         if to_raw and to_dt and len(to_raw.strip()) == 10:
             to_dt = to_dt + timedelta(days=1)
         if from_dt and to_dt and from_dt >= to_dt:
@@ -359,4 +360,4 @@ def delete_read_notifications():
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error deleting read notifications: {str(e)}")
-        return jsonify({'error': 'Internal server error', 'message': str(e)}), 500
+        return jsonify({'error': 'Internal server error', 'message': safe_error_message(e)}), 500
