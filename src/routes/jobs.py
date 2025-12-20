@@ -50,6 +50,23 @@ def _get_scheduler_timezone():
         logger.warning(f"Invalid SCHEDULER_TIMEZONE '{tz_name}', falling back to UTC")
         return ZoneInfo('UTC')
 
+
+def _compute_next_execution_at(job: Job) -> Optional[str]:
+    """
+    Compute next scheduled run without relying on an in-process APScheduler instance.
+    This keeps "Next run" correct even if the scheduler is disabled in this process.
+    """
+    try:
+        if not job.is_active:
+            return None
+        tz = _get_scheduler_timezone()
+        now = datetime.now(tz)
+        trigger = CronTrigger.from_crontab(job.cron_expression, timezone=tz)
+        next_run_time = trigger.get_next_fire_time(None, now)
+        return next_run_time.isoformat() if next_run_time else None
+    except Exception:
+        return None
+
 def _get_default_github_owner() -> str:
     return (os.getenv('DEFAULT_GITHUB_OWNER') or 'Pay-Baymax').strip()
 
@@ -800,47 +817,46 @@ def create_job():
         db.session.add(new_job)
         db.session.commit()
 
-        # Add job to APScheduler
-        try:
-            scheduler_tz = _get_scheduler_timezone()
-            trigger = CronTrigger.from_crontab(cron_expression, timezone=scheduler_tz)
-            job_config = {
-                'target_url': new_job.target_url,
-                'github_owner': new_job.github_owner,
-                'github_repo': new_job.github_repo,
-                'github_workflow_name': new_job.github_workflow_name,
-                'metadata': new_job.get_metadata(),
-                'enable_email_notifications': new_job.enable_email_notifications,
-                'notification_emails': new_job.get_notification_emails(),
-                'notify_on_success': new_job.notify_on_success
-            }
-            scheduler.add_job(
-                func=execute_job_with_app_context,
-                trigger=trigger,
-                args=[new_job.id, new_job.name, job_config],
-                id=new_job.id,
-                name=new_job.name,
-                replace_existing=True
-            )
-            logger.info(f"Job '{new_job.name}' (ID: {new_job.id}) created and scheduled successfully")
-            
-            # Broadcast notification to all users
-            current_user = get_current_user()
+        # Add job to APScheduler (best-effort, only if scheduler is running in this process)
+        if scheduler.running:
             try:
-                broadcast_job_created(new_job.name, new_job.id, current_user.email)
-                logger.info(f"Broadcast notification sent: Job '{new_job.name}' created")
+                scheduler_tz = _get_scheduler_timezone()
+                trigger = CronTrigger.from_crontab(cron_expression, timezone=scheduler_tz)
+                job_config = {
+                    'target_url': new_job.target_url,
+                    'github_owner': new_job.github_owner,
+                    'github_repo': new_job.github_repo,
+                    'github_workflow_name': new_job.github_workflow_name,
+                    'metadata': new_job.get_metadata(),
+                    'enable_email_notifications': new_job.enable_email_notifications,
+                    'notification_emails': new_job.get_notification_emails(),
+                    'notify_on_success': new_job.notify_on_success
+                }
+                scheduler.add_job(
+                    func=execute_job_with_app_context,
+                    trigger=trigger,
+                    args=[new_job.id, new_job.name, job_config],
+                    id=new_job.id,
+                    name=new_job.name,
+                    replace_existing=True
+                )
+                logger.info(f"Job '{new_job.name}' (ID: {new_job.id}) created and scheduled successfully")
             except Exception as e:
-                logger.error(f"Failed to broadcast job created notification: {str(e)}")
-                
+                # Rollback database if scheduler fails
+                db.session.delete(new_job)
+                db.session.commit()
+                logger.error(f"Failed to schedule job: {str(e)}")
+                return jsonify({
+                    'error': 'Failed to schedule job',
+                    'message': safe_error_message(e, 'Failed to schedule job')
+                }), 500
+
+        # Broadcast notification to all users
+        try:
+            broadcast_job_created(new_job.name, new_job.id, current_user.email if current_user else 'Unknown')
+            logger.info(f"Broadcast notification sent: Job '{new_job.name}' created")
         except Exception as e:
-            # Rollback database if scheduler fails
-            db.session.delete(new_job)
-            db.session.commit()
-            logger.error(f"Failed to schedule job: {str(e)}")
-            return jsonify({
-                'error': 'Failed to schedule job',
-                'message': safe_error_message(e, 'Failed to schedule job')
-            }), 500
+            logger.error(f"Failed to broadcast job created notification: {str(e)}")
 
         return jsonify({
             'message': 'Job created successfully',
@@ -1044,40 +1060,41 @@ def bulk_upload_jobs():
 
         db.session.commit()
 
-        # Schedule active jobs after commit; on failures, disable the job and report.
+        # Schedule active jobs after commit (best-effort, only if scheduler is running in this process).
         scheduling_errors = []
-        scheduler_tz = _get_scheduler_timezone()
-        for job_info in created_jobs:
-            job_id = job_info.get('id')
-            if not job_id:
-                continue
-            job = Job.query.get(job_id)
-            if not job or not job.is_active:
-                continue
-            try:
-                trigger = CronTrigger.from_crontab(job.cron_expression, timezone=scheduler_tz)
-                job_config = {
-                    'target_url': job.target_url,
-                    'github_owner': job.github_owner,
-                    'github_repo': job.github_repo,
-                    'github_workflow_name': job.github_workflow_name,
-                    'metadata': job.get_metadata(),
-                    'enable_email_notifications': job.enable_email_notifications,
-                    'notification_emails': job.get_notification_emails(),
-                    'notify_on_success': job.notify_on_success,
-                }
-                scheduler.add_job(
-                    func=execute_job_with_app_context,
-                    trigger=trigger,
-                    args=[job.id, job.name, job_config],
-                    id=job.id,
-                    name=job.name,
-                    replace_existing=True,
-                )
-            except Exception as e:
-                logger.error(f"Failed to schedule bulk job '{job.name}': {str(e)}")
-                job.is_active = False
-                scheduling_errors.append({'job_name': job.name, 'error': 'Failed to schedule job', 'message': safe_error_message(e, 'Failed to schedule job')})
+        if scheduler.running:
+            scheduler_tz = _get_scheduler_timezone()
+            for job_info in created_jobs:
+                job_id = job_info.get('id')
+                if not job_id:
+                    continue
+                job = Job.query.get(job_id)
+                if not job or not job.is_active:
+                    continue
+                try:
+                    trigger = CronTrigger.from_crontab(job.cron_expression, timezone=scheduler_tz)
+                    job_config = {
+                        'target_url': job.target_url,
+                        'github_owner': job.github_owner,
+                        'github_repo': job.github_repo,
+                        'github_workflow_name': job.github_workflow_name,
+                        'metadata': job.get_metadata(),
+                        'enable_email_notifications': job.enable_email_notifications,
+                        'notification_emails': job.get_notification_emails(),
+                        'notify_on_success': job.notify_on_success,
+                    }
+                    scheduler.add_job(
+                        func=execute_job_with_app_context,
+                        trigger=trigger,
+                        args=[job.id, job.name, job_config],
+                        id=job.id,
+                        name=job.name,
+                        replace_existing=True,
+                    )
+                except Exception as e:
+                    logger.error(f"Failed to schedule bulk job '{job.name}': {str(e)}")
+                    job.is_active = False
+                    scheduling_errors.append({'job_name': job.name, 'error': 'Failed to schedule job', 'message': safe_error_message(e, 'Failed to schedule job')})
 
         if scheduling_errors:
             db.session.commit()
@@ -1135,9 +1152,7 @@ def list_jobs():
             last_execution_at = last_exec_by_job_id.get(job.id)
             payload['last_execution_at'] = last_execution_at.isoformat() if last_execution_at else None
 
-            sched_job = scheduler.get_job(job.id)
-            next_run_time = getattr(sched_job, 'next_run_time', None) if sched_job else None
-            payload['next_execution_at'] = next_run_time.isoformat() if next_run_time else None
+            payload['next_execution_at'] = _compute_next_execution_at(job)
 
             jobs_payload.append(payload)
 
@@ -1188,9 +1203,7 @@ def get_job(job_id):
         )
         payload['last_execution_at'] = last_execution_at.isoformat() if last_execution_at else None
 
-        sched_job = scheduler.get_job(job.id)
-        next_run_time = getattr(sched_job, 'next_run_time', None) if sched_job else None
-        payload['next_execution_at'] = next_run_time.isoformat() if next_run_time else None
+        payload['next_execution_at'] = _compute_next_execution_at(job)
 
         return jsonify({'job': payload}), 200
         
@@ -1395,8 +1408,8 @@ def update_job(job_id):
         # Save to database
         db.session.commit()
         
-        # Update scheduler if needed
-        if needs_scheduler_update:
+        # Update scheduler if needed (best-effort, only if scheduler is running in this process)
+        if needs_scheduler_update and scheduler.running:
             try:
                 scheduler_tz = _get_scheduler_timezone()
                 # Remove old job from scheduler
@@ -1511,13 +1524,14 @@ def delete_job(job_id):
         
         job_name = job.name
         
-        # Remove from scheduler if exists
-        try:
-            if scheduler.get_job(job_id):
-                scheduler.remove_job(job_id)
-                logger.info(f"Job '{job_name}' (ID: {job_id}) removed from scheduler")
-        except Exception as e:
-            logger.warning(f"Failed to remove job from scheduler: {str(e)}")
+        # Remove from scheduler if exists (best-effort, only if scheduler is running in this process)
+        if scheduler.running:
+            try:
+                if scheduler.get_job(job_id):
+                    scheduler.remove_job(job_id)
+                    logger.info(f"Job '{job_name}' (ID: {job_id}) removed from scheduler")
+            except Exception as e:
+                logger.warning(f"Failed to remove job from scheduler: {str(e)}")
         
         # Delete from database
         db.session.delete(job)
@@ -1582,11 +1596,12 @@ def execute_job_now(job_id):
             if job.is_active:
                 job.is_active = False
                 db.session.commit()
-                try:
-                    if scheduler.get_job(job.id):
-                        scheduler.remove_job(job.id)
-                except Exception:
-                    pass
+                if scheduler.running:
+                    try:
+                        if scheduler.get_job(job.id):
+                            scheduler.remove_job(job.id)
+                    except Exception:
+                        pass
             return jsonify({
                 'error': 'Job expired',
                 'message': 'This job has passed its end_date and was auto-paused.',

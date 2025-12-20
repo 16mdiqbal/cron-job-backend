@@ -136,12 +136,16 @@ pip install -r requirements.txt
 - `GITHUB_TOKEN` - GitHub personal access token (optional, for GitHub Actions)
 - `SCHEDULER_TIMEZONE` - Scheduler timezone (default: Asia/Tokyo)
 - `SCHEDULER_ENABLED` - Set to `false` to disable APScheduler startup (useful for scripts/tests)
+- `SCHEDULER_POLL_SECONDS` - How often the scheduler syncs jobs from DB (default: 60)
 - `FRONTEND_BASE_URL` - Used to generate job links in Slack messages (default: http://localhost:5173)
 - `EXPOSE_ERROR_DETAILS` - When `true`, API error responses include exception details (default: true in dev, false in production)
 - `ALLOW_DEFAULT_ADMIN` - When `true`, auto-creates default `admin/admin123` if missing (default: true in dev, false in production)
 
 ## Notes / Behavior
 
+- **Scheduler safety (single runner):**
+  - The backend uses a lock file at `src/instance/scheduler.lock` so only one process runs APScheduler (prevents duplicate executions if multiple workers are started).
+  - If another process holds the lock, that process will still serve APIs but will not run schedules.
 - **SQLite schema updates (no Alembic):**
   - The app uses a lightweight SQLite schema guard on startup (`src/utils/sqlite_schema.py`) to add new columns when needed.
 - **End date enforcement:**
