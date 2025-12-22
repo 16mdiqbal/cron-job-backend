@@ -24,6 +24,14 @@
 13. [Risk Mitigation](#risk-mitigation)
 14. [Success Criteria](#success-criteria)
 15. [Timeline Summary](#timeline-summary)
+16. [Progress Log](#progress-log)
+17. [Environment Setup Guide](#environment-setup-guide)
+18. [API Contract Appendix](#api-contract-appendix)
+19. [Validation Rules Reference](#validation-rules-reference)
+20. [Testing Checklist](#testing-checklist)
+21. [Rollback Procedures](#rollback-procedures)
+22. [Database Migration Notes](#database-migration-notes)
+23. [References](#references)
 
 ---
 
@@ -621,6 +629,974 @@ src/
 
 ---
 
+## Environment Setup Guide
+
+### Prerequisites
+
+```bash
+# Python 3.11+ required
+python --version  # Should be 3.11+
+
+# Create virtual environment (if not exists)
+python -m venv venv
+source venv/bin/activate  # macOS/Linux
+```
+
+### Step 1: Install Dependencies
+
+```bash
+# Install existing Flask dependencies
+pip install -r requirements.txt
+
+# Install FastAPI dependencies (add to requirements.txt first)
+pip install fastapi uvicorn[standard] python-jose[cryptography] python-multipart fastapi-mail pydantic pydantic-settings httpx
+```
+
+### Step 2: Run Dual-Stack Locally
+
+**Terminal 1 - Flask (Port 5000):**
+```bash
+cd /path/to/cron-job-backend
+source venv/bin/activate
+./start_server.sh
+# Or: python -m flask run --port 5000
+```
+
+**Terminal 2 - FastAPI (Port 8001):**
+```bash
+cd /path/to/cron-job-backend
+source venv/bin/activate
+uvicorn src.fastapi_app.main:app --reload --port 8001
+```
+
+### Step 3: Verify Both Running
+
+```bash
+# Flask health check
+curl http://localhost:5000/api/health
+
+# FastAPI health check
+curl http://localhost:8001/api/v2/health
+
+# FastAPI OpenAPI docs
+open http://localhost:8001/docs
+```
+
+### Step 4: Proxy Configuration (Optional)
+
+For unified access on port 8000, create `nginx.conf`:
+
+```nginx
+upstream flask {
+    server 127.0.0.1:5000;
+}
+
+upstream fastapi {
+    server 127.0.0.1:8001;
+}
+
+server {
+    listen 8000;
+
+    # FastAPI endpoints (new)
+    location /api/v2/ {
+        proxy_pass http://fastapi;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # Flask endpoints (legacy)
+    location /api/ {
+        proxy_pass http://flask;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+
+    # FastAPI docs
+    location /docs {
+        proxy_pass http://fastapi;
+    }
+
+    location /openapi.json {
+        proxy_pass http://fastapi;
+    }
+}
+```
+
+---
+
+## API Contract Appendix
+
+### Standard Response Formats
+
+#### Success Response
+```json
+{
+  "data": { ... },
+  "message": "Operation successful"
+}
+```
+
+#### Error Response
+```json
+{
+  "error": "Error type",
+  "message": "Human-readable error message",
+  "details": { ... }  // Optional field-level errors
+}
+```
+
+#### Paginated Response
+```json
+{
+  "items": [ ... ],
+  "total": 100,
+  "page": 1,
+  "per_page": 20,
+  "total_pages": 5
+}
+```
+
+---
+
+### Authentication Endpoints
+
+#### POST `/api/v2/auth/login`
+
+**Request:**
+```json
+{
+  "username": "john_doe",      // OR "email": "john@example.com"
+  "password": "secure_password"
+}
+```
+
+**Response (200):**
+```json
+{
+  "message": "Login successful",
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "refresh_token": "eyJhbGciOiJIUzI1NiIs...",
+  "user": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "username": "john_doe",
+    "email": "john@example.com",
+    "role": "user",
+    "is_active": true,
+    "created_at": "2025-01-15T10:30:00Z",
+    "updated_at": "2025-01-15T10:30:00Z"
+  }
+}
+```
+
+**Error (401):**
+```json
+{
+  "error": "Invalid credentials",
+  "message": "Invalid email/username or password"
+}
+```
+
+#### POST `/api/v2/auth/register` (Admin only)
+
+**Request:**
+```json
+{
+  "username": "new_user",
+  "email": "new@example.com",
+  "password": "secure_password",
+  "role": "user"  // Optional, defaults to "viewer"
+}
+```
+
+**Response (201):**
+```json
+{
+  "message": "User registered successfully",
+  "user": {
+    "id": "...",
+    "username": "new_user",
+    "email": "new@example.com",
+    "role": "user",
+    "is_active": true,
+    "created_at": "2025-12-22T10:30:00Z",
+    "updated_at": "2025-12-22T10:30:00Z"
+  }
+}
+```
+
+#### POST `/api/v2/auth/refresh`
+
+**Request:**
+```json
+{
+  "refresh_token": "eyJhbGciOiJIUzI1NiIs..."
+}
+```
+
+**Response (200):**
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiIs...",
+  "refresh_token": "eyJhbGciOiJIUzI1NiIs..."
+}
+```
+
+#### GET `/api/v2/auth/me`
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Response (200):**
+```json
+{
+  "id": "550e8400-e29b-41d4-a716-446655440000",
+  "username": "john_doe",
+  "email": "john@example.com",
+  "role": "admin",
+  "is_active": true,
+  "created_at": "2025-01-15T10:30:00Z",
+  "updated_at": "2025-01-15T10:30:00Z"
+}
+```
+
+---
+
+### Jobs Endpoints
+
+#### GET `/api/v2/jobs`
+
+**Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `page` | int | 1 | Page number |
+| `per_page` | int | 20 | Items per page (max: 100) |
+| `category` | string | - | Filter by category slug |
+| `pic_team` | string | - | Filter by team slug |
+| `is_active` | bool | - | Filter by active status |
+| `search` | string | - | Search in job name |
+| `sort_by` | string | `created_at` | Sort field |
+| `sort_order` | string | `desc` | `asc` or `desc` |
+
+**Response (200):**
+```json
+{
+  "jobs": [
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Daily Backup Job",
+      "cron_expression": "0 2 * * *",
+      "target_url": null,
+      "github_owner": "myorg",
+      "github_repo": "myrepo",
+      "github_workflow_name": "backup.yml",
+      "metadata": {"env": "production"},
+      "category": "maintenance",
+      "pic_team": "devops",
+      "end_date": "2025-12-31",
+      "enable_email_notifications": true,
+      "notification_emails": ["admin@example.com"],
+      "notify_on_success": false,
+      "created_by": "user-uuid",
+      "is_active": true,
+      "created_at": "2025-01-15T10:30:00Z",
+      "updated_at": "2025-01-15T10:30:00Z",
+      "next_execution_at": "2025-12-23T02:00:00+09:00"
+    }
+  ],
+  "total": 45,
+  "page": 1,
+  "per_page": 20,
+  "total_pages": 3
+}
+```
+
+#### POST `/api/v2/jobs`
+
+**Request:**
+```json
+{
+  "name": "Daily Backup Job",
+  "cron_expression": "0 2 * * *",
+  "category": "maintenance",
+  "pic_team": "devops",
+  "end_date": "2025-12-31",
+  
+  // GitHub Actions (Option A)
+  "github_owner": "myorg",
+  "github_repo": "myrepo",
+  "github_workflow_name": "backup.yml",
+  
+  // OR Webhook (Option B)
+  "target_url": "https://api.example.com/webhook",
+  
+  // Optional
+  "metadata": {"env": "production", "priority": "high"},
+  "enable_email_notifications": true,
+  "notification_emails": ["admin@example.com", "ops@example.com"],
+  "notify_on_success": false,
+  "is_active": true
+}
+```
+
+**Response (201):**
+```json
+{
+  "message": "Job created successfully",
+  "job": { ... }
+}
+```
+
+#### PUT `/api/v2/jobs/{id}`
+
+**Request:** Same as POST, all fields optional (partial update)
+
+**Response (200):**
+```json
+{
+  "message": "Job updated successfully",
+  "job": { ... }
+}
+```
+
+#### DELETE `/api/v2/jobs/{id}`
+
+**Response (200):**
+```json
+{
+  "message": "Job deleted successfully"
+}
+```
+
+#### POST `/api/v2/jobs/{id}/execute`
+
+**Request (optional):**
+```json
+{
+  "inputs": {"key": "value"}  // Optional workflow inputs
+}
+```
+
+**Response (200):**
+```json
+{
+  "message": "Job triggered successfully",
+  "execution": {
+    "id": "exec-uuid",
+    "job_id": "job-uuid",
+    "status": "running",
+    "trigger_type": "manual",
+    "started_at": "2025-12-22T10:30:00Z"
+  }
+}
+```
+
+#### POST `/api/v2/jobs/bulk-upload`
+
+**Request:** `multipart/form-data` with CSV file
+
+**CSV Format:**
+```csv
+name,cron_expression,category,pic_team,end_date,github_owner,github_repo,github_workflow_name,status
+Job 1,0 0 * * *,maintenance,devops,2025-12-31,myorg,repo1,workflow.yml,enable
+Job 2,0 6 * * 1,reports,analytics,2025-12-31,myorg,repo2,report.yml,enable
+```
+
+**Response (200):**
+```json
+{
+  "message": "Bulk upload completed",
+  "created": 5,
+  "updated": 3,
+  "failed": 1,
+  "errors": [
+    {"row": 7, "name": "Bad Job", "error": "Invalid cron expression"}
+  ],
+  "stats": {
+    "original_row_count": 9,
+    "removed_empty_row_count": 0
+  }
+}
+```
+
+---
+
+### Cron Utility Endpoints
+
+#### POST `/api/v2/jobs/validate-cron`
+
+**Request:**
+```json
+{
+  "cron_expression": "0 2 * * *"
+}
+```
+
+**Response (200):**
+```json
+{
+  "valid": true,
+  "cron_expression": "0 2 * * *",
+  "description": "At 02:00 AM every day"
+}
+```
+
+**Response (400):**
+```json
+{
+  "valid": false,
+  "error": "Cron expression must have exactly 5 fields"
+}
+```
+
+#### POST `/api/v2/jobs/cron-preview`
+
+**Request:**
+```json
+{
+  "cron_expression": "0 2 * * *",
+  "count": 5
+}
+```
+
+**Response (200):**
+```json
+{
+  "cron_expression": "0 2 * * *",
+  "next_runs": [
+    "2025-12-23T02:00:00+09:00",
+    "2025-12-24T02:00:00+09:00",
+    "2025-12-25T02:00:00+09:00",
+    "2025-12-26T02:00:00+09:00",
+    "2025-12-27T02:00:00+09:00"
+  ],
+  "timezone": "Asia/Tokyo"
+}
+```
+
+---
+
+### Executions Endpoints
+
+#### GET `/api/v2/executions`
+
+**Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `page` | int | 1 | Page number |
+| `per_page` | int | 20 | Items per page (max: 100) |
+| `job_id` | uuid | - | Filter by job |
+| `status` | string | - | `success`, `failed`, `running` |
+| `trigger_type` | string | - | `scheduled`, `manual` |
+| `from` | datetime | - | Start date filter (ISO format) |
+| `to` | datetime | - | End date filter (ISO format) |
+
+**Response (200):**
+```json
+{
+  "executions": [
+    {
+      "id": "exec-uuid",
+      "job_id": "job-uuid",
+      "job_name": "Daily Backup Job",
+      "status": "success",
+      "trigger_type": "scheduled",
+      "started_at": "2025-12-22T02:00:00Z",
+      "completed_at": "2025-12-22T02:00:15Z",
+      "duration_seconds": 15.234,
+      "execution_type": "github_actions",
+      "target": "myorg/myrepo/backup.yml",
+      "response_status": 204,
+      "error_message": null
+    }
+  ],
+  "total": 1250,
+  "page": 1,
+  "per_page": 20,
+  "total_pages": 63
+}
+```
+
+#### GET `/api/v2/executions/statistics`
+
+**Query Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `job_id` | uuid | Optional: filter by job |
+| `from` | datetime | Optional: start date |
+| `to` | datetime | Optional: end date |
+
+**Response (200):**
+```json
+{
+  "total_executions": 1250,
+  "successful_executions": 1180,
+  "failed_executions": 65,
+  "running_executions": 5,
+  "success_rate": 94.4,
+  "average_duration_seconds": 12.5,
+  "range": {
+    "from": "2025-12-01T00:00:00Z",
+    "to": "2025-12-22T23:59:59Z"
+  }
+}
+```
+
+---
+
+### Notifications Endpoints
+
+#### GET `/api/v2/notifications`
+
+**Query Parameters:**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `page` | int | 1 | Page number |
+| `per_page` | int | 20 | Items per page (max: 100) |
+| `unread_only` | bool | false | Only unread notifications |
+| `from` | datetime | - | Filter by created_at start |
+| `to` | datetime | - | Filter by created_at end |
+
+**Response (200):**
+```json
+{
+  "notifications": [
+    {
+      "id": "notif-uuid",
+      "user_id": "user-uuid",
+      "title": "Job Failed",
+      "message": "Job 'Daily Backup' failed with error: Connection timeout",
+      "type": "error",
+      "related_job_id": "job-uuid",
+      "related_execution_id": "exec-uuid",
+      "is_read": false,
+      "read_at": null,
+      "created_at": "2025-12-22T10:30:00Z"
+    }
+  ],
+  "total": 45,
+  "page": 1,
+  "per_page": 20,
+  "total_pages": 3
+}
+```
+
+#### GET `/api/v2/notifications/unread-count`
+
+**Response (200):**
+```json
+{
+  "unread_count": 12
+}
+```
+
+---
+
+### Categories & Teams Endpoints
+
+#### GET `/api/v2/job-categories`
+
+**Response (200):**
+```json
+{
+  "categories": [
+    {
+      "id": "cat-uuid",
+      "slug": "maintenance",
+      "name": "Maintenance Jobs",
+      "is_active": true,
+      "created_at": "2025-01-15T10:30:00Z",
+      "updated_at": "2025-01-15T10:30:00Z"
+    }
+  ]
+}
+```
+
+#### POST `/api/v2/job-categories`
+
+**Request:**
+```json
+{
+  "name": "Analytics Jobs",
+  "slug": "analytics"  // Optional, auto-generated from name if omitted
+}
+```
+
+#### GET `/api/v2/pic-teams`
+
+**Response (200):**
+```json
+{
+  "teams": [
+    {
+      "id": "team-uuid",
+      "slug": "devops",
+      "name": "DevOps Team",
+      "slack_handle": "@devops-team",
+      "is_active": true,
+      "created_at": "2025-01-15T10:30:00Z",
+      "updated_at": "2025-01-15T10:30:00Z"
+    }
+  ]
+}
+```
+
+#### POST `/api/v2/pic-teams`
+
+**Request:**
+```json
+{
+  "name": "QA Team",
+  "slug": "qa",  // Optional
+  "slack_handle": "@qa-team"  // Optional
+}
+```
+
+---
+
+### Settings Endpoints
+
+#### GET `/api/v2/settings/slack` (Admin only)
+
+**Response (200):**
+```json
+{
+  "id": "settings-uuid",
+  "is_enabled": true,
+  "webhook_url": "https://hooks.slack.com/services/...",
+  "channel": "#cron-alerts",
+  "created_at": "2025-01-15T10:30:00Z",
+  "updated_at": "2025-01-15T10:30:00Z"
+}
+```
+
+#### PUT `/api/v2/settings/slack` (Admin only)
+
+**Request:**
+```json
+{
+  "is_enabled": true,
+  "webhook_url": "https://hooks.slack.com/services/...",
+  "channel": "#cron-alerts"
+}
+```
+
+---
+
+## Validation Rules Reference
+
+### User Fields
+
+| Field | Type | Required | Constraints |
+|-------|------|----------|-------------|
+| `username` | string | Yes | 3-80 chars, unique, alphanumeric + underscore |
+| `email` | string | Yes | Valid email format, unique, max 120 chars |
+| `password` | string | Yes | Min 6 chars |
+| `role` | enum | No | `admin`, `user`, `viewer` (default: `viewer`) |
+| `is_active` | bool | No | Default: `true` |
+
+### Job Fields
+
+| Field | Type | Required | Constraints |
+|-------|------|----------|-------------|
+| `name` | string | Yes | 1-255 chars, unique |
+| `cron_expression` | string | Yes | Valid 5-field cron (minute hour day month dow) |
+| `category` | string | Yes | Must exist in `job_categories` |
+| `pic_team` | string | Yes | Must exist in `pic_teams` |
+| `end_date` | date | Yes | Format: `YYYY-MM-DD`, must be future date |
+| `target_url` | string | No* | Valid HTTPS URL, max 500 chars |
+| `github_owner` | string | No* | 1-255 chars |
+| `github_repo` | string | No* | 1-255 chars |
+| `github_workflow_name` | string | No* | 1-255 chars, must end with `.yml` or `.yaml` |
+| `metadata` | object | No | Valid JSON object |
+| `enable_email_notifications` | bool | No | Default: `false` |
+| `notification_emails` | array | No | List of valid email addresses |
+| `notify_on_success` | bool | No | Default: `false` |
+| `is_active` | bool | No | Default: `true` |
+
+*Either `target_url` OR all three GitHub fields (`github_owner`, `github_repo`, `github_workflow_name`) must be provided.
+
+### Cron Expression Rules
+
+| Field | Position | Valid Values |
+|-------|----------|--------------|
+| Minute | 1 | 0-59, *, */N |
+| Hour | 2 | 0-23, *, */N |
+| Day of Month | 3 | 1-31, *, */N |
+| Month | 4 | 1-12, *, */N |
+| Day of Week | 5 | 0-6 (Sun=0), *, */N |
+
+**Timezone:** All cron expressions are interpreted in `Asia/Tokyo` (JST) unless configured otherwise.
+
+### Category & Team Fields
+
+| Field | Type | Required | Constraints |
+|-------|------|----------|-------------|
+| `name` | string | Yes | 1-255 chars |
+| `slug` | string | No | 1-100 chars, lowercase, alphanumeric + hyphen, unique |
+| `slack_handle` | string | No | Max 255 chars (teams only) |
+| `is_active` | bool | No | Default: `true` |
+
+---
+
+## Testing Checklist
+
+### Phase 3: Cross-Stack Token Compatibility
+
+| Test Case | Expected Result | Status |
+|-----------|-----------------|--------|
+| Login via Flask → Use token on FastAPI | Token accepted, user data returned | ⬜ |
+| Login via FastAPI → Use token on Flask | Token accepted, user data returned | ⬜ |
+| Expired token on FastAPI | 401 Unauthorized | ⬜ |
+| Invalid token on FastAPI | 401 Unauthorized | ⬜ |
+| Admin token → Admin-only endpoint | Access granted | ⬜ |
+| User token → Admin-only endpoint | 403 Forbidden | ⬜ |
+| Viewer token → Write endpoint | 403 Forbidden | ⬜ |
+
+### Phase 4: Response Parity Tests
+
+For each read-only endpoint, compare Flask and FastAPI responses:
+
+```bash
+# Example parity test script
+flask_response=$(curl -s http://localhost:5000/api/jobs -H "Authorization: Bearer $TOKEN")
+fastapi_response=$(curl -s http://localhost:8001/api/v2/jobs -H "Authorization: Bearer $TOKEN")
+
+# Compare (ignoring order, timestamps may differ slightly)
+diff <(echo "$flask_response" | jq -S '.jobs | sort_by(.id)') \
+     <(echo "$fastapi_response" | jq -S '.jobs | sort_by(.id)')
+```
+
+| Endpoint | Parity Verified | Notes |
+|----------|-----------------|-------|
+| GET /jobs | ⬜ | Check pagination, filters |
+| GET /jobs/{id} | ⬜ | |
+| GET /jobs/{id}/executions | ⬜ | |
+| GET /executions | ⬜ | |
+| GET /executions/{id} | ⬜ | |
+| GET /executions/statistics | ⬜ | |
+| GET /job-categories | ⬜ | |
+| GET /pic-teams | ⬜ | |
+| GET /notifications | ⬜ | |
+
+### Phase 5: Write Operation Tests
+
+| Test Case | Expected Result | Status |
+|-----------|-----------------|--------|
+| Create job with valid data | 201, job created | ⬜ |
+| Create job with invalid cron | 400, validation error | ⬜ |
+| Create job with duplicate name | 409, conflict | ⬜ |
+| Update job as owner | 200, job updated | ⬜ |
+| Update job as non-owner (non-admin) | 403, forbidden | ⬜ |
+| Delete job as admin | 200, job deleted | ⬜ |
+| Execute job → Check execution created | Execution in DB | ⬜ |
+| Bulk upload valid CSV | Jobs created/updated | ⬜ |
+| Bulk upload invalid CSV | Partial success with errors | ⬜ |
+
+### Phase 8: Scheduler Tests
+
+| Test Case | Expected Result | Status |
+|-----------|-----------------|--------|
+| Create job → Appears in APScheduler | Job scheduled | ⬜ |
+| Update cron → Schedule updated | Next run time changed | ⬜ |
+| Disable job → Removed from scheduler | No longer scheduled | ⬜ |
+| Job executes at scheduled time | Execution recorded | ⬜ |
+| Job past end_date → Auto-paused | is_active = false | ⬜ |
+| Failed execution → Notification created | Notification in DB | ⬜ |
+| Failed execution → Email sent | Email received | ⬜ |
+| Failed execution → Slack message | Slack message posted | ⬜ |
+
+---
+
+## Rollback Procedures
+
+### Scenario 1: FastAPI Endpoint Bug (During Dual-Stack)
+
+**Symptoms:** FastAPI endpoint returns incorrect data or errors.
+
+**Rollback Steps:**
+1. Frontend is still using Flask (`/api/`), so no user impact
+2. Fix the FastAPI endpoint
+3. Run parity tests again before proceeding
+
+**No action needed for users.**
+
+---
+
+### Scenario 2: Database Corruption (During Migration)
+
+**Symptoms:** Data integrity issues, foreign key violations.
+
+**Rollback Steps:**
+```bash
+# 1. Stop both servers
+pkill -f "flask" && pkill -f "uvicorn"
+
+# 2. Restore database from backup
+cp src/instance/cron_jobs.db.backup src/instance/cron_jobs.db
+
+# 3. Restart Flask only
+./start_server.sh
+```
+
+**Prevention:** Take database backup before each phase:
+```bash
+cp src/instance/cron_jobs.db src/instance/cron_jobs.db.backup_phase_N
+```
+
+---
+
+### Scenario 3: Scheduler Race Condition
+
+**Symptoms:** Jobs executing twice, or not executing at all.
+
+**Rollback Steps:**
+1. Keep scheduler on Flask (Phase 8 not started)
+2. Verify scheduler lock file: `src/instance/scheduler.lock`
+3. Kill any duplicate processes:
+   ```bash
+   ps aux | grep -E "flask|uvicorn" | grep -v grep
+   # Kill duplicates manually
+   ```
+
+**Prevention:** Only run scheduler on ONE process until Phase 8 complete.
+
+---
+
+### Scenario 4: Full Migration Failure (Phase 8)
+
+**Symptoms:** FastAPI not stable enough to replace Flask.
+
+**Rollback Steps:**
+```bash
+# 1. Revert frontend API base URL
+# In cron-job-frontend/src/constants/api.ts
+# Change back: export const API_BASE = '/api';
+
+# 2. Rebuild and redeploy frontend
+cd cron-job-frontend
+npm run build
+
+# 3. Stop FastAPI, keep Flask running
+pkill -f "uvicorn"
+
+# 4. Update proxy to route all traffic to Flask
+# Remove /api/v2 → FastAPI routing
+
+# 5. Keep FastAPI code for future attempt
+# Don't delete - just don't route to it
+```
+
+---
+
+### Scenario 5: Token Incompatibility
+
+**Symptoms:** Users logged in via Flask can't access FastAPI, or vice versa.
+
+**Diagnosis:**
+```bash
+# Decode token and verify claims
+python -c "
+from jose import jwt
+token = 'YOUR_TOKEN_HERE'
+secret = 'YOUR_JWT_SECRET'
+print(jwt.decode(token, secret, algorithms=['HS256']))
+"
+```
+
+**Fix:**
+1. Ensure both apps use identical `JWT_SECRET_KEY`
+2. Ensure both apps expect same claim structure (`sub`, `role`, `email`)
+3. Check token expiry settings match
+
+---
+
+## Database Migration Notes
+
+### Sync vs Async Sessions
+
+**Flask (Sync):**
+```python
+from src.models import db
+
+def get_user(user_id):
+    return User.query.get(user_id)  # Sync
+
+with app.app_context():
+    user = get_user("uuid")
+```
+
+**FastAPI (Async):**
+```python
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+
+async def get_user(session: AsyncSession, user_id: str):
+    result = await session.execute(
+        select(User).where(User.id == user_id)
+    )
+    return result.scalar_one_or_none()
+
+async with async_session() as session:
+    user = await get_user(session, "uuid")
+```
+
+### Session Dependency for FastAPI
+
+```python
+# src/fastapi_app/dependencies/database.py
+from typing import AsyncGenerator
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine, async_sessionmaker
+
+DATABASE_URL = "sqlite+aiosqlite:///./src/instance/cron_jobs.db"
+
+engine = create_async_engine(DATABASE_URL, echo=False)
+async_session_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
+async def get_db() -> AsyncGenerator[AsyncSession, None]:
+    async with async_session_maker() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+```
+
+### Using in Routes
+
+```python
+from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
+from ..dependencies.database import get_db
+
+@router.get("/jobs/{job_id}")
+async def get_job(job_id: str, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Job).where(Job.id == job_id))
+    job = result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    return job
+```
+
+### Critical: Shared Database Access
+
+During dual-stack operation, both Flask and FastAPI access the same SQLite file:
+
+1. **SQLite Limitations:** SQLite has limited concurrent write support
+2. **Mitigation:** Use `check_same_thread=False` and connection pooling
+3. **Production:** Migrate to MySQL/PostgreSQL before heavy load
+
+```python
+# For SQLite during migration
+engine = create_async_engine(
+    DATABASE_URL,
+    connect_args={"check_same_thread": False},
+    pool_pre_ping=True,
+)
+```
+
+---
+
 ## References
 
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
@@ -628,7 +1604,9 @@ src/
 - [Pydantic V2](https://docs.pydantic.dev/latest/)
 - [python-jose](https://github.com/mpdavis/python-jose)
 - [fastapi-mail](https://sabuhish.github.io/fastapi-mail/)
+- [APScheduler with FastAPI](https://apscheduler.readthedocs.io/)
+- [aiosqlite](https://aiosqlite.omnilib.dev/)
 
 ---
 
-*Last Updated: December 21, 2025*
+*Last Updated: December 22, 2025*
