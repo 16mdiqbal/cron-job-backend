@@ -723,7 +723,7 @@ venv/bin/python -m pytest -q tests_fastapi
 
 ## Phase 7: Notifications & Settings (Days 22-24)
 
-### Status: 🟨 In Progress (7A ✅, 7B ✅, 7C ✅, 7D ✅)
+### Status: 🟨 In Progress (7A ✅, 7B ✅, 7C ✅, 7D ✅, 7E ✅)
 
 ### Objective
 Complete remaining endpoints (Notifications, Slack Settings, Category/Team write) and any required supporting utilities.
@@ -740,9 +740,9 @@ Complete remaining endpoints (Notifications, Slack Settings, Category/Team write
 | 6 | `DELETE /api/notifications/delete-read` | `DELETE /api/v2/notifications/delete-read` | ✅ |
 | 7 | `GET /api/settings/slack` | `GET /api/v2/settings/slack` | ✅ |
 | 8 | `PUT /api/settings/slack` | `PUT /api/v2/settings/slack` | ✅ |
-| 9 | `POST /api/job-categories` | `POST /api/v2/job-categories` | ⬜ |
-| 10 | `PUT /api/job-categories/<id>` | `PUT /api/v2/job-categories/{id}` | ⬜ |
-| 11 | `DELETE /api/job-categories/<id>` | `DELETE /api/v2/job-categories/{id}` | ⬜ |
+| 9 | `POST /api/job-categories` | `POST /api/v2/job-categories` | ✅ |
+| 10 | `PUT /api/job-categories/<id>` | `PUT /api/v2/job-categories/{id}` | ✅ |
+| 11 | `DELETE /api/job-categories/<id>` | `DELETE /api/v2/job-categories/{id}` | ✅ |
 | 12 | `POST /api/pic-teams` | `POST /api/v2/pic-teams` | ⬜ |
 | 13 | `PUT /api/pic-teams/<id>` | `PUT /api/v2/pic-teams/{id}` | ⬜ |
 | 14 | `DELETE /api/pic-teams/<id>` | `DELETE /api/v2/pic-teams/{id}` | ⬜ |
@@ -757,7 +757,7 @@ This phase is intentionally split by **logical API grouping** to keep each unit 
 | **7B ✅** | Notifications (Mark Read) | `PUT /api/v2/notifications/{id}/read`, `PUT /api/v2/notifications/read-all` | `tests_fastapi/notifications/test_notifications_mark_read.py` |
 | **7C ✅** | Notifications (Delete) | `DELETE /api/v2/notifications/{id}`, `DELETE /api/v2/notifications/delete-read` | `tests_fastapi/notifications/test_notifications_delete.py` |
 | **7D ✅** | Settings (Slack) | `GET /api/v2/settings/slack`, `PUT /api/v2/settings/slack` | `tests_fastapi/settings/test_slack_settings.py` |
-| **7E** | Job Categories (Write) | `POST/PUT/DELETE /api/v2/job-categories` | `tests_fastapi/taxonomy_write/test_job_categories_write.py` |
+| **7E ✅** | Job Categories (Write) | `POST/PUT/DELETE /api/v2/job-categories` | `tests_fastapi/taxonomy_write/test_job_categories_write.py` |
 | **7F** | PIC Teams (Write) | `POST/PUT/DELETE /api/v2/pic-teams` | `tests_fastapi/taxonomy_write/test_pic_teams_write.py` |
 | **7G** | Utilities (Optional / Last) | Async Slack client + notifications helpers (no API) | Unit tests if applicable |
 

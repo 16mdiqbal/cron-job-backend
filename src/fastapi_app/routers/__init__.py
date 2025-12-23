@@ -16,6 +16,7 @@ from .auth import router as auth_router
 from .jobs import router as jobs_router
 from .executions import router as executions_router
 from .taxonomy import router as taxonomy_router
+from .taxonomy_write import router as taxonomy_write_router
 from .notifications import router as notifications_router
 from .settings import router as settings_router
 
@@ -24,6 +25,7 @@ __all__ = [
     "jobs_router",
     "executions_router",
     "taxonomy_router",
+    "taxonomy_write_router",
     "notifications_router",
     "settings_router",
 ]

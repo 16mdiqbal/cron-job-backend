@@ -255,11 +255,20 @@ def register_routers(app: FastAPI) -> None:
         )
     
     # Import and register routers
-    from .routers import auth_router, jobs_router, executions_router, taxonomy_router, notifications_router, settings_router
+    from .routers import (
+        auth_router,
+        jobs_router,
+        executions_router,
+        taxonomy_router,
+        taxonomy_write_router,
+        notifications_router,
+        settings_router,
+    )
     app.include_router(auth_router, prefix="/api/v2")
     app.include_router(jobs_router, prefix="/api/v2")
     app.include_router(executions_router, prefix="/api/v2")
     app.include_router(taxonomy_router, prefix="/api/v2")
+    app.include_router(taxonomy_write_router, prefix="/api/v2")
     app.include_router(notifications_router, prefix="/api/v2")
     app.include_router(settings_router, prefix="/api/v2")
 
