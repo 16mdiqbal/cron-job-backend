@@ -106,6 +106,22 @@ def _cron_validation_error(expression: str) -> Optional[str]:
     return None
 
 
+def _cron_next_runs(expression: str, count: int = 5) -> list[str]:
+    tz = _get_scheduler_timezone()
+    trigger = CronTrigger.from_crontab((expression or "").strip(), timezone=tz)
+    now = datetime.now(tz)
+    prev = None
+    runs: list[str] = []
+    for _ in range(max(0, min(int(count or 0), 20))):
+        nxt = trigger.get_next_fire_time(prev, now)
+        if not nxt:
+            break
+        runs.append(nxt.isoformat())
+        prev = nxt
+        now = nxt
+    return runs
+
+
 async def _resolve_category_slug(db: AsyncSession, raw: Optional[str]) -> str:
     """
     Resolve a category from either a slug or a display name.
@@ -485,6 +501,190 @@ async def bulk_upload_jobs(
             content={
                 "error": ERROR_INTERNAL_SERVER,
                 "message": str(exc) if settings.expose_error_details else ERROR_INTERNAL_SERVER,
+            },
+        )
+
+
+@router.post(
+    "/validate-cron",
+    status_code=200,
+    summary="Validate cron expression",
+    description="Validate a cron expression (5-field crontab) and return an explanatory message.",
+)
+async def validate_cron_expression(
+    request: Request,
+    _: CurrentUser,
+):
+    content_type = (request.headers.get("content-type") or "").lower()
+    if "application/json" not in content_type:
+        return JSONResponse(status_code=400, content={"error": "Content-Type must be application/json"})
+
+    data = await request.json()
+    expression = str(data.get("expression") or data.get("cron_expression") or "").strip()
+
+    err = _cron_validation_error(expression)
+    if err:
+        return JSONResponse(
+            status_code=200,
+            content={"valid": False, "error": "Invalid cron expression", "message": err},
+        )
+    return JSONResponse(status_code=200, content={"valid": True, "message": "Valid cron expression"})
+
+
+@router.post(
+    "/cron-preview",
+    status_code=200,
+    summary="Preview cron schedule",
+    description="Return the next N run times for a cron expression (scheduler timezone).",
+)
+async def cron_preview(
+    request: Request,
+    _: CurrentUser,
+):
+    content_type = (request.headers.get("content-type") or "").lower()
+    if "application/json" not in content_type:
+        return JSONResponse(status_code=400, content={"error": "Content-Type must be application/json"})
+
+    data = await request.json()
+    expression = str(data.get("expression") or data.get("cron_expression") or "").strip()
+    count = data.get("count") or 5
+
+    err = _cron_validation_error(expression)
+    if err:
+        return JSONResponse(status_code=400, content={"error": "Invalid cron expression", "message": err})
+
+    tz = get_settings().scheduler_timezone or "Asia/Tokyo"
+    runs = _cron_next_runs(expression, count=int(count))
+    return JSONResponse(status_code=200, content={"timezone": tz, "next_runs": runs, "count": len(runs)})
+
+
+@router.post(
+    "/test-run",
+    status_code=200,
+    summary="Test run a job configuration",
+    description="Execute a one-off test run for the given job configuration without creating a Job or JobExecution.",
+)
+async def test_run_job(
+    request: Request,
+    _: UserOrAdmin,
+):
+    content_type = (request.headers.get("content-type") or "").lower()
+    if "application/json" not in content_type:
+        return JSONResponse(status_code=400, content={"error": "Content-Type must be application/json"})
+
+    data = await request.json()
+    if not isinstance(data, dict):
+        return JSONResponse(status_code=400, content={"error": "Invalid payload", "message": "JSON body must be an object."})
+
+    target_url = str(data.get("target_url") or "").strip() or None
+    github_owner = str(data.get("github_owner") or "").strip() or None
+    github_repo = str(data.get("github_repo") or "").strip() or None
+    github_workflow_name = str(data.get("github_workflow_name") or "").strip() or None
+    metadata = data.get("metadata") or {}
+    if metadata and not isinstance(metadata, dict):
+        return JSONResponse(status_code=400, content={"error": "Invalid metadata", "message": '"metadata" must be an object.'})
+
+    if not target_url and not (github_owner and github_repo and github_workflow_name):
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "Missing target configuration",
+                "message": "Provide target_url or GitHub config (github_owner, github_repo, github_workflow_name).",
+            },
+        )
+
+    timeout_seconds = float(data.get("timeout_seconds") or 10)
+    timeout_seconds = max(1.0, min(timeout_seconds, 30.0))
+
+    settings = get_settings()
+
+    if target_url:
+        parsed = urlparse(target_url)
+        if parsed.scheme not in {"http", "https"}:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Invalid target_url", "message": "Webhook URL must start with http:// or https://"},
+            )
+        try:
+            status_code, _ = await _http_request(
+                "POST",
+                target_url,
+                json_payload=metadata or {},
+                timeout=timeout_seconds,
+            )
+            ok = 200 <= status_code < 300
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "ok": ok,
+                    "type": "webhook",
+                    "status_code": status_code,
+                    "message": "Webhook test run succeeded." if ok else "Webhook test run failed.",
+                },
+            )
+        except Exception as exc:
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "ok": False,
+                    "type": "webhook",
+                    "error": "Request failed",
+                    "message": str(exc) if settings.expose_error_details else "Request failed",
+                },
+            )
+
+    token = (os.getenv("GITHUB_TOKEN") or "").strip()
+    if not token:
+        return JSONResponse(
+            status_code=200,
+            content={
+                "ok": False,
+                "type": "github",
+                "error": "GitHub token not configured",
+                "message": "Set GITHUB_TOKEN in backend .env to test-run GitHub workflows.",
+            },
+        )
+
+    ref = None
+    if isinstance(metadata, dict):
+        ref = str(metadata.get("ref") or metadata.get("branch") or "").strip() or None
+    ref = ref or "main"
+
+    dispatch_url = f"https://api.github.com/repos/{github_owner}/{github_repo}/actions/workflows/{github_workflow_name}/dispatches"
+    payload: dict[str, Any] = {"ref": ref}
+    if metadata:
+        payload["inputs"] = metadata
+
+    try:
+        status_code, _ = await _http_request(
+            "POST",
+            dispatch_url,
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Accept": "application/vnd.github+json",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+            json_payload=payload,
+            timeout=timeout_seconds,
+        )
+        ok = status_code in {201, 204}
+        return JSONResponse(
+            status_code=200,
+            content={
+                "ok": ok,
+                "type": "github",
+                "status_code": status_code,
+                "message": "GitHub workflow dispatch triggered." if ok else "GitHub workflow dispatch failed.",
+            },
+        )
+    except Exception as exc:
+        return JSONResponse(
+            status_code=200,
+            content={
+                "ok": False,
+                "type": "github",
+                "error": "Request failed",
+                "message": str(exc) if settings.expose_error_details else "Request failed",
             },
         )
 
@@ -946,8 +1146,9 @@ async def _http_request(
     *,
     headers: Optional[dict[str, str]] = None,
     json_payload: Any = None,
+    timeout: float = 10.0,
 ) -> tuple[int, str]:
-    async with httpx.AsyncClient(timeout=10) as client:
+    async with httpx.AsyncClient(timeout=timeout) as client:
         resp = await client.request(method, url, headers=headers, json=json_payload)
         return int(resp.status_code), resp.text or ""
 
