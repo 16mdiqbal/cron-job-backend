@@ -387,6 +387,32 @@ async def update_user(
     )
 
 
+@router.delete(
+    "/users/{user_id}",
+    summary="Delete user",
+    description="Admin-only. Cannot delete yourself. Matches Flask `/api/auth/users/<id>` response shape.",
+    tags=["Users"],
+)
+async def delete_user(
+    user_id: str,
+    current_user: AdminUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if current_user.id == user_id:
+        return JSONResponse(status_code=400, content={"error": "Cannot delete your own account"})
+
+    result = await db.execute(select(User).where(User.id == user_id).limit(1))
+    user = result.scalar_one_or_none()
+    if not user:
+        return JSONResponse(status_code=404, content={"error": "User not found"})
+
+    deleted_user = {"id": user.id, "username": user.username}
+    await db.delete(user)
+    await db.commit()
+
+    return JSONResponse(status_code=200, content={"message": "User deleted successfully", "deleted_user": deleted_user})
+
+
 # ============================================================================
 # User Registration (Admin Only)
 # ============================================================================
