@@ -418,3 +418,182 @@ async def create_job(
                 "message": str(exc) if settings.expose_error_details else ERROR_INTERNAL_SERVER,
             },
         )
+
+
+@router.put(
+    "/{job_id}",
+    status_code=200,
+    summary="Update job",
+    description="Update an existing job. Phase 5 is DB-first (no APScheduler scheduling side-effects in FastAPI).",
+)
+async def update_job(
+    job_id: str,
+    request: Request,
+    current_user: UserOrAdmin,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    try:
+        job_result = await db.execute(select(Job).where(Job.id == job_id).limit(1))
+        job = job_result.scalar_one_or_none()
+        if not job:
+            return JSONResponse(
+                status_code=404,
+                content={"error": ERROR_JOB_NOT_FOUND, "message": f"No job found with ID: {job_id}"},
+            )
+
+        if current_user.role != "admin" and job.created_by != current_user.id:
+            return JSONResponse(
+                status_code=403,
+                content={"error": "Insufficient permissions", "message": "You can only update your own jobs"},
+            )
+
+        content_type = (request.headers.get("content-type") or "").lower()
+        if "application/json" not in content_type:
+            return JSONResponse(status_code=400, content={"error": "Content-Type must be application/json"})
+
+        try:
+            data: dict[str, Any] = await request.json()
+        except Exception:
+            return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+
+        if "name" in data:
+            new_name = str(data.get("name", "")).strip()
+            if not new_name:
+                return JSONResponse(status_code=400, content={"error": "Job name cannot be empty"})
+            if new_name != job.name:
+                existing = await db.execute(
+                    select(Job).where(Job.name == new_name, Job.id != job.id).limit(1)
+                )
+                if existing.scalar_one_or_none():
+                    return JSONResponse(
+                        status_code=400,
+                        content={"error": "Duplicate job name", "message": f'A job with the name "{new_name}" already exists.'},
+                    )
+                job.name = new_name
+
+        if "cron_expression" in data:
+            new_cron = str(data.get("cron_expression", "")).strip()
+            cron_err = _cron_validation_error(new_cron)
+            if cron_err:
+                return JSONResponse(status_code=400, content={"error": "Invalid cron expression", "message": cron_err})
+            job.cron_expression = new_cron
+
+        if "target_url" in data:
+            job.target_url = str(data.get("target_url", "")).strip() or None
+
+        if "github_owner" in data:
+            job.github_owner = str(data.get("github_owner", "")).strip() or None
+        if "github_repo" in data:
+            job.github_repo = str(data.get("github_repo", "")).strip() or None
+        if "github_workflow_name" in data:
+            job.github_workflow_name = str(data.get("github_workflow_name", "")).strip() or None
+
+        if not job.target_url and job.github_repo and job.github_workflow_name and not job.github_owner:
+            job.github_owner = get_settings().default_github_owner
+
+        if "metadata" in data:
+            metadata = data.get("metadata")
+            if metadata is None:
+                metadata = {}
+            if not isinstance(metadata, dict):
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "Invalid metadata", "message": "metadata must be a JSON object"},
+                )
+            job.set_metadata(metadata)
+
+        if "category" in data:
+            category = await _resolve_category_slug(db, data.get("category"))
+            category_error = await _validate_category_slug(db, category)
+            if category_error:
+                return JSONResponse(status_code=400, content={"error": "Invalid category", "message": category_error})
+            job.category = category
+
+        if "end_date" in data:
+            end_date_raw = data.get("end_date")
+            try:
+                parsed_end_date = date.fromisoformat(str(end_date_raw).strip()) if end_date_raw else None
+            except Exception:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "Invalid end_date", "message": "Invalid end_date. Use YYYY-MM-DD."},
+                )
+            if not parsed_end_date:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "Invalid end_date", "message": "end_date is required (YYYY-MM-DD)."},
+                )
+            if parsed_end_date < _today_jst():
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "Invalid end_date", "message": "end_date must be today or in the future (JST)."},
+                )
+            job.end_date = parsed_end_date
+
+        if "pic_team" in data or "pic_team_slug" in data:
+            pic_team_raw = data.get("pic_team") or data.get("pic_team_slug")
+            pic_team = await _resolve_pic_team_slug(db, str(pic_team_raw).strip() if pic_team_raw is not None else None)
+            pic_team_error = await _validate_pic_team_slug(db, pic_team)
+            if pic_team_error:
+                return JSONResponse(status_code=400, content={"error": "Invalid PIC team", "message": pic_team_error})
+            job.pic_team = pic_team
+
+        if "enable_email_notifications" in data:
+            job.enable_email_notifications = bool(data.get("enable_email_notifications"))
+            if not job.enable_email_notifications:
+                job.set_notification_emails([])
+                job.notify_on_success = False
+
+        if "notification_emails" in data:
+            emails = data.get("notification_emails")
+            if emails is None:
+                emails = []
+            if not isinstance(emails, list):
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "Invalid notification_emails", "message": "notification_emails must be a list"},
+                )
+            if job.enable_email_notifications:
+                job.set_notification_emails(emails)
+            else:
+                job.set_notification_emails([])
+
+        if "notify_on_success" in data:
+            job.notify_on_success = bool(data.get("notify_on_success")) if job.enable_email_notifications else False
+
+        if "is_active" in data:
+            job.is_active = bool(data.get("is_active"))
+
+        if job.is_active and job.end_date and job.end_date < _today_jst():
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": "Job expired",
+                    "message": "Job cannot be enabled after end_date has passed. Update end_date first.",
+                },
+            )
+
+        if not job.target_url and not (job.github_owner and job.github_repo and job.github_workflow_name):
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": "Missing target configuration",
+                    "message": "Job must have either target_url or complete GitHub Actions configuration",
+                },
+            )
+
+        await db.commit()
+        await db.refresh(job)
+
+        return JSONResponse(status_code=200, content={"message": "Job updated successfully", "job": job.to_dict()})
+    except Exception as exc:
+        await db.rollback()
+        logger.exception("Error updating job %s", job_id)
+        settings = get_settings()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": ERROR_INTERNAL_SERVER,
+                "message": str(exc) if settings.expose_error_details else ERROR_INTERNAL_SERVER,
+            },
+        )

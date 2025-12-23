@@ -444,7 +444,7 @@ Migrate job creation, update, and deletion with full validation.
 | Sub-Phase | Goal | Endpoints | Primary Test Location |
 |----------:|------|-----------|------------------------|
 | **5A** | Job create (validation + RBAC) | `POST /api/v2/jobs` | `tests_fastapi/jobs_write/test_create.py` ✅ |
-| **5B** | Job update (partial update + ownership rules) | `PUT /api/v2/jobs/{id}` | `tests_fastapi/jobs_write/test_update.py` |
+| **5B** | Job update (partial update + ownership rules) | `PUT /api/v2/jobs/{id}` | `tests_fastapi/jobs_write/test_update.py` ✅ |
 | **5C** | Job delete (parity behavior + RBAC) | `DELETE /api/v2/jobs/{id}` | `tests_fastapi/jobs_write/test_delete.py` |
 | **5D** | Manual execute (execution record + trigger) | `POST /api/v2/jobs/{id}/execute` | `tests_fastapi/jobs_write/test_execute.py` |
 | **5E** | Bulk CSV upload (validation + partial success) | `POST /api/v2/jobs/bulk-upload` | `tests_fastapi/jobs_write/test_bulk_upload.py` |
@@ -484,6 +484,10 @@ Migrate job creation, update, and deletion with full validation.
 Phase 5A implemented:
 - Endpoint: `POST /api/v2/jobs` (DB-first; no APScheduler scheduling side-effects)
 - Tests: `tests_fastapi/jobs_write/test_create.py`
+
+Phase 5B implemented:
+- Endpoint: `PUT /api/v2/jobs/{id}` (DB-first; ownership enforced)
+- Tests: `tests_fastapi/jobs_write/test_update.py`
 
 Verified:
 ```bash
