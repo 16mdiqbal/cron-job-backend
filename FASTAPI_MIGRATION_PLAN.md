@@ -443,7 +443,7 @@ Migrate job creation, update, and deletion with full validation.
 
 | Sub-Phase | Goal | Endpoints | Primary Test Location |
 |----------:|------|-----------|------------------------|
-| **5A** | Job create (validation + RBAC) | `POST /api/v2/jobs` | `tests_fastapi/jobs_write/test_create.py` |
+| **5A** | Job create (validation + RBAC) | `POST /api/v2/jobs` | `tests_fastapi/jobs_write/test_create.py` ✅ |
 | **5B** | Job update (partial update + ownership rules) | `PUT /api/v2/jobs/{id}` | `tests_fastapi/jobs_write/test_update.py` |
 | **5C** | Job delete (parity behavior + RBAC) | `DELETE /api/v2/jobs/{id}` | `tests_fastapi/jobs_write/test_delete.py` |
 | **5D** | Manual execute (execution record + trigger) | `POST /api/v2/jobs/{id}/execute` | `tests_fastapi/jobs_write/test_execute.py` |
@@ -481,8 +481,13 @@ Migrate job creation, update, and deletion with full validation.
 - [ ] RBAC + validation coverage complete for write flows
 
 ### Notes
-```
-<!-- Add implementation notes here -->
+Phase 5A implemented:
+- Endpoint: `POST /api/v2/jobs` (DB-first; no APScheduler scheduling side-effects)
+- Tests: `tests_fastapi/jobs_write/test_create.py`
+
+Verified:
+```bash
+venv/bin/python -m pytest -q tests_fastapi
 ```
 
 ---
