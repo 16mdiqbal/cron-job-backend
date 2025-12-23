@@ -447,7 +447,7 @@ Migrate job creation, update, and deletion with full validation.
 | **5B** | Job update (partial update + ownership rules) | `PUT /api/v2/jobs/{id}` | `tests_fastapi/jobs_write/test_update.py` ✅ |
 | **5C** | Job delete (parity behavior + RBAC) | `DELETE /api/v2/jobs/{id}` | `tests_fastapi/jobs_write/test_delete.py` ✅ |
 | **5D** | Manual execute (execution record + trigger) | `POST /api/v2/jobs/{id}/execute` | `tests_fastapi/jobs_write/test_execute.py` ✅ |
-| **5E** | Bulk CSV upload (validation + partial success) | `POST /api/v2/jobs/bulk-upload` | `tests_fastapi/jobs_write/test_bulk_upload.py` |
+| **5E** | Bulk CSV upload (validation + partial success) | `POST /api/v2/jobs/bulk-upload` | `tests_fastapi/jobs_write/test_bulk_upload.py` ✅ |
 | **5F** | Cron utilities | `POST /api/v2/jobs/validate-cron`, `POST /api/v2/jobs/cron-preview`, `POST /api/v2/jobs/test-run` | `tests_fastapi/cron_tools/*` |
 
 ### Implementation Notes (Guidelines)
@@ -496,6 +496,10 @@ Phase 5C implemented:
 Phase 5D implemented:
 - Endpoint: `POST /api/v2/jobs/{id}/execute` (manual run; overrides not persisted; DB-first re: scheduler side-effects)
 - Tests: `tests_fastapi/jobs_write/test_execute.py`
+
+Phase 5E implemented:
+- Endpoint: `POST /api/v2/jobs/bulk-upload` (CSV normalization + partial success; DB-first)
+- Tests: `tests_fastapi/jobs_write/test_bulk_upload.py`
 
 Verified:
 ```bash

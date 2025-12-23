@@ -10,8 +10,12 @@ Implements:
 - PUT /api/v2/jobs/{job_id} (Phase 5B)
 - DELETE /api/v2/jobs/{job_id} (Phase 5C)
 - POST /api/v2/jobs/{job_id}/execute (Phase 5D)
+- POST /api/v2/jobs/bulk-upload (Phase 5E)
 """
 
+import csv
+import io
+import json
 import logging
 import os
 import re
@@ -21,7 +25,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from apscheduler.triggers.cron import CronTrigger
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, File, UploadFile, Form
 from fastapi.responses import JSONResponse
 import httpx
 from sqlalchemy import desc, func, select
@@ -205,6 +209,276 @@ async def list_jobs(
         return JobListReadResponse(count=len(jobs_payload), jobs=jobs_payload)
     except Exception as exc:
         logger.exception("Error listing jobs")
+        settings = get_settings()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": ERROR_INTERNAL_SERVER,
+                "message": str(exc) if settings.expose_error_details else ERROR_INTERNAL_SERVER,
+            },
+        )
+
+
+@router.post(
+    "/bulk-upload",
+    status_code=200,
+    summary="Bulk upload jobs from CSV",
+    description="Bulk create jobs from a CSV file. Phase 5 is DB-first (no APScheduler scheduling side-effects in FastAPI).",
+)
+async def bulk_upload_jobs(
+    current_user: UserOrAdmin,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    file: Optional[UploadFile] = File(None),
+    default_github_owner: Optional[str] = Form(None),
+    dry_run: Optional[str] = Form(None),
+):
+    try:
+        if not file:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Missing file", "message": 'Upload a CSV file using form field "file".'},
+            )
+        if not file.filename:
+            return JSONResponse(status_code=400, content={"error": "Missing file", "message": "No file selected."})
+
+        default_owner = (default_github_owner or os.getenv("DEFAULT_GITHUB_OWNER") or "").strip()
+        if not default_owner:
+            default_owner = get_settings().default_github_owner
+
+        is_dry_run = _truthy(dry_run)
+
+        raw_bytes = await file.read()
+        try:
+            csv_text = raw_bytes.decode("utf-8-sig")
+        except Exception:
+            csv_text = raw_bytes.decode("utf-8", errors="replace")
+
+        reader = csv.reader(io.StringIO(csv_text))
+        rows = [row for row in reader]
+        headers, normalized_rows, stats = _normalize_csv_rows(rows)
+
+        errors: list[dict[str, Any]] = []
+        created_jobs: list[dict[str, Any]] = []
+        seen_names: set[str] = set()
+
+        for row_index, values in enumerate(normalized_rows, start=2):
+            row = _lower_key_map(headers, values)
+
+            name = _first_non_empty(row, ["job name", "name"])
+            cron_expression = _first_non_empty(
+                row, ["cron schedule (jst)", "cron expression", "cron", "cron_expression"]
+            )
+            status = _first_non_empty(row, ["status", "is_active", "active"])
+            target_url = _first_non_empty(row, ["target url", "target_url", "url"])
+
+            github_owner = _first_non_empty(row, ["github owner", "owner", "github_owner"])
+            github_repo = _first_non_empty(row, ["repo", "github repo", "github_repo"])
+            github_workflow_name = _first_non_empty(
+                row, ["workflow name", "github workflow name", "github_workflow_name"]
+            )
+            category_raw = _first_non_empty(row, ["category", "job category", "job_category"])
+            category = await _resolve_category_slug(db, category_raw)
+            category_error = await _validate_category_slug(db, category)
+            if category_error:
+                errors.append({"row": row_index, "job_name": name, "error": "Invalid category", "message": category_error})
+                continue
+
+            end_date_raw = _first_non_empty(row, ["end date", "end_date"])
+            pic_team_raw = _first_non_empty(row, ["pic team", "pic_team", "pic team slug", "pic_team_slug"])
+            try:
+                end_date = _parse_end_date(end_date_raw)
+            except ValueError as exc:
+                errors.append({"row": row_index, "job_name": name, "error": "Invalid end_date", "message": str(exc)})
+                continue
+            if not end_date:
+                errors.append(
+                    {
+                        "row": row_index,
+                        "job_name": name,
+                        "error": "Missing required fields",
+                        "message": "end_date (YYYY-MM-DD) is required.",
+                    }
+                )
+                continue
+            if end_date < _today_jst():
+                errors.append(
+                    {
+                        "row": row_index,
+                        "job_name": name,
+                        "error": "Invalid end_date",
+                        "message": "end_date must be today or in the future (JST).",
+                    }
+                )
+                continue
+
+            pic_team = await _resolve_pic_team_slug(db, pic_team_raw)
+            pic_team_error = await _validate_pic_team_slug(db, pic_team)
+            if pic_team_error:
+                errors.append({"row": row_index, "job_name": name, "error": "Invalid PIC team", "message": pic_team_error})
+                continue
+
+            branch = _first_non_empty(row, ["branch", "ref"])
+            request_body = _first_non_empty(row, ["request body", "request_body", "metadata"])
+
+            if not name or not cron_expression:
+                errors.append(
+                    {"row": row_index, "error": "Missing required fields", "message": "name and cron_expression are required."}
+                )
+                continue
+
+            if name in seen_names:
+                errors.append({"row": row_index, "job_name": name, "error": "Duplicate job name in CSV"})
+                continue
+            seen_names.add(name)
+
+            existing = await db.execute(select(Job).where(Job.name == name).limit(1))
+            if existing.scalar_one_or_none():
+                errors.append(
+                    {
+                        "row": row_index,
+                        "job_name": name,
+                        "error": "Duplicate job name",
+                        "message": f'A job with the name "{name}" already exists.',
+                    }
+                )
+                continue
+
+            cron_err = _cron_validation_error(cron_expression)
+            if cron_err:
+                errors.append({"row": row_index, "job_name": name, "error": "Invalid cron expression", "message": cron_err})
+                continue
+
+            is_active = _status_to_active(status)
+
+            metadata: dict[str, Any] = {}
+            if request_body:
+                try:
+                    parsed = json.loads(request_body)
+                except Exception as exc:
+                    errors.append(
+                        {
+                            "row": row_index,
+                            "job_name": name,
+                            "error": "Invalid JSON in Request Body",
+                            "message": str(exc) or "Invalid JSON in Request Body",
+                        }
+                    )
+                    continue
+                if isinstance(parsed, dict):
+                    metadata = parsed
+                else:
+                    errors.append(
+                        {
+                            "row": row_index,
+                            "job_name": name,
+                            "error": "Invalid Request Body",
+                            "message": "Request Body must be a JSON object.",
+                        }
+                    )
+                    continue
+
+            if branch and "branchDetails" not in metadata:
+                metadata["branchDetails"] = branch
+
+            inferred_owner = github_owner
+            inferred_repo = github_repo
+            if github_repo and "/" in github_repo:
+                parts = [p for p in github_repo.split("/") if p]
+                if len(parts) == 2:
+                    inferred_owner, inferred_repo = parts[0].strip(), parts[1].strip()
+
+            if not target_url and not (inferred_owner or default_owner) and (inferred_repo or github_workflow_name):
+                errors.append(
+                    {
+                        "row": row_index,
+                        "job_name": name,
+                        "error": "Missing GitHub owner",
+                        "message": 'Provide "github_owner" column or default_github_owner.',
+                    }
+                )
+                continue
+
+            effective_owner = inferred_owner or default_owner
+
+            if not target_url and not (effective_owner and inferred_repo and github_workflow_name):
+                errors.append(
+                    {
+                        "row": row_index,
+                        "job_name": name,
+                        "error": "Missing target configuration",
+                        "message": "Provide target_url or GitHub config (github_owner, github_repo, github_workflow_name).",
+                    }
+                )
+                continue
+
+            if is_dry_run:
+                created_jobs.append(
+                    {
+                        "name": name,
+                        "is_active": is_active,
+                        "cron_expression": cron_expression,
+                        "end_date": end_date_raw,
+                        "pic_team": pic_team,
+                    }
+                )
+                continue
+
+            new_job = Job(
+                name=name,
+                cron_expression=cron_expression,
+                target_url=(target_url or "").strip() or None,
+                github_owner=effective_owner if not target_url else None,
+                github_repo=inferred_repo if not target_url else None,
+                github_workflow_name=github_workflow_name if not target_url else None,
+                category=category,
+                end_date=end_date,
+                pic_team=pic_team,
+                created_by=current_user.id,
+                is_active=is_active,
+                enable_email_notifications=False,
+                notify_on_success=False,
+            )
+            if metadata:
+                new_job.set_metadata(metadata)
+
+            db.add(new_job)
+            await db.flush()
+
+            created_jobs.append({"id": new_job.id, "name": new_job.name, "is_active": new_job.is_active})
+
+        if is_dry_run:
+            return JSONResponse(
+                status_code=200,
+                content={
+                    "message": "CSV validated successfully",
+                    "dry_run": True,
+                    "stats": stats,
+                    "created_count": len(created_jobs),
+                    "error_count": len(errors),
+                    "errors": errors,
+                    "jobs": created_jobs,
+                },
+            )
+
+        await db.commit()
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "message": "Bulk upload processed",
+                "dry_run": False,
+                "stats": stats,
+                "created_count": len(created_jobs),
+                "error_count": len(errors),
+                "errors": errors,
+                "jobs": created_jobs,
+            },
+        )
+    except ValueError as exc:
+        return JSONResponse(status_code=400, content={"error": "Invalid CSV", "message": str(exc) or "Invalid CSV"})
+    except Exception as exc:
+        await db.rollback()
+        logger.exception("Error bulk uploading jobs")
         settings = get_settings()
         return JSONResponse(
             status_code=500,
@@ -676,6 +950,82 @@ async def _http_request(
     async with httpx.AsyncClient(timeout=10) as client:
         resp = await client.request(method, url, headers=headers, json=json_payload)
         return int(resp.status_code), resp.text or ""
+
+
+def _truthy(value: Optional[str]) -> bool:
+    if value is None:
+        return False
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
+def _status_to_active(value: Optional[str]) -> bool:
+    if value is None:
+        return True
+    lowered = value.strip().lower()
+    if lowered in {"disable", "disabled", "inactive", "false", "0", "no", "n", "off"}:
+        return False
+    if lowered in {"enable", "enabled", "active", "true", "1", "yes", "y", "on"}:
+        return True
+    return True
+
+
+def _normalize_csv_rows(rows: list[list[str]]) -> tuple[list[str], list[list[str]], dict[str, int]]:
+    if not rows:
+        raise ValueError("CSV is empty.")
+
+    raw_headers = rows[0] or []
+    header_names = [(h or "").strip() for h in raw_headers]
+    keep_indexes = [i for i, header in enumerate(header_names) if header]
+    if not keep_indexes:
+        raise ValueError("CSV header row has no usable column names.")
+
+    kept_headers = [header_names[i] for i in keep_indexes]
+
+    normalized_rows: list[list[str]] = []
+    removed_empty_row_count = 0
+
+    for raw_row in rows[1:]:
+        padded = list(raw_row or [])
+        if len(padded) < len(raw_headers):
+            padded.extend([""] * (len(raw_headers) - len(padded)))
+
+        kept = [str(padded[i] or "") for i in keep_indexes]
+        if all((c or "").strip() == "" for c in kept):
+            removed_empty_row_count += 1
+            continue
+        normalized_rows.append(kept)
+
+    stats = {
+        "original_column_count": len(raw_headers),
+        "original_row_count": max(0, len(rows) - 1),
+        "removed_column_count": len(raw_headers) - len(kept_headers),
+        "removed_empty_row_count": removed_empty_row_count,
+    }
+    return kept_headers, normalized_rows, stats
+
+
+def _lower_key_map(headers: list[str], values: list[str]) -> dict[str, str]:
+    return {str(h or "").strip().lower(): str(values[i] or "").strip() for i, h in enumerate(headers)}
+
+
+def _first_non_empty(row: dict[str, str], keys: list[str]) -> Optional[str]:
+    for key in keys:
+        value = row.get(key)
+        if value is not None and value.strip() != "":
+            return value.strip()
+    return None
+
+
+def _parse_end_date(value: Optional[str]) -> Optional[date]:
+    if value is None:
+        return None
+    raw = (value or "").strip()
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw)
+    except Exception as exc:
+        raise ValueError("Invalid end_date. Use YYYY-MM-DD.") from exc
 
 
 @router.post(
