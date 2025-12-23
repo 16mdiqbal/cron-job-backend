@@ -619,8 +619,8 @@ Complete user management + preference endpoints that are not covered by Phase 3.
 | 2 | `POST /api/auth/refresh` | `POST /api/v2/auth/refresh` | Refresh | ✅ |
 | 3 | `POST /api/auth/register` | `POST /api/v2/auth/register` | Admin | ✅ |
 | 4 | `GET /api/auth/me` | `GET /api/v2/auth/me` | JWT | ✅ |
-| 5 | `GET /api/auth/users` | `GET /api/v2/auth/users` | Admin | ⬜ |
-| 6 | `GET /api/auth/users/<id>` | `GET /api/v2/auth/users/{id}` | JWT | ⬜ |
+| 5 | `GET /api/auth/users` | `GET /api/v2/auth/users` | Admin | ✅ |
+| 6 | `GET /api/auth/users/<id>` | `GET /api/v2/auth/users/{id}` | JWT | ✅ |
 | 7 | `PUT /api/auth/users/<id>` | `PUT /api/v2/auth/users/{id}` | JWT | ⬜ |
 | 8 | `DELETE /api/auth/users/<id>` | `DELETE /api/v2/auth/users/{id}` | Admin | ⬜ |
 | 9 | `GET /api/auth/users/<id>/preferences` | `GET /api/v2/auth/users/{id}/preferences` | JWT | ⬜ |
@@ -628,24 +628,74 @@ Complete user management + preference endpoints that are not covered by Phase 3.
 | 11 | `GET /api/auth/users/<id>/ui-preferences` | `GET /api/v2/auth/users/{id}/ui-preferences` | JWT | ⬜ |
 | 12 | `PUT /api/auth/users/<id>/ui-preferences` | `PUT /api/v2/auth/users/{id}/ui-preferences` | JWT | ⬜ |
 
+### Sub-Phases (Execution Order)
+
+| Sub-Phase | Goal | Endpoints | Primary Test Location |
+|----------:|------|-----------|------------------------|
+| **6A** | Users read (admin list + self/admin get) | `GET /api/v2/auth/users`, `GET /api/v2/auth/users/{id}` | `tests_fastapi/users/test_users_read.py` ✅ |
+| **6B** | User update (self + admin controls) | `PUT /api/v2/auth/users/{id}` | `tests_fastapi/users/test_users_update.py` |
+| **6C** | User delete (admin-only + self-delete guard) | `DELETE /api/v2/auth/users/{id}` | `tests_fastapi/users/test_users_delete.py` |
+| **6D** | Notification preferences (get-or-create + update) | `GET/PUT /api/v2/auth/users/{id}/preferences` | `tests_fastapi/users/test_notification_preferences.py` |
+| **6E** | UI preferences (get-or-create + update) | `GET/PUT /api/v2/auth/users/{id}/ui-preferences` | `tests_fastapi/users/test_ui_preferences.py` |
+
 ### Tasks
 
 - [x] `src/fastapi_app/routers/auth.py` (login/refresh/register/me/logout/verify)
 - [x] Password hashing remains `passlib.hash.pbkdf2_sha256` via `src/models/user.py`
-- [ ] Add user management endpoints (`/users`, `/users/{id}`)
-- [ ] Add preference endpoints (`/users/{id}/preferences`, `/users/{id}/ui-preferences`)
-- [ ] Implement user self-update restrictions
-- [ ] Add admin-only protections
+- [x] Implement Phase 6A: users read endpoints + tests
+- [ ] Implement Phase 6B: user update endpoint + tests
+- [ ] Implement Phase 6C: user delete endpoint + tests
+- [ ] Implement Phase 6D: notification preferences endpoints + tests
+- [ ] Implement Phase 6E: UI preferences endpoints + tests
+- [ ] Ensure response shapes match Flask where feasible (`error` + `message` keys, and payload nesting like `user`, `preferences`)
 
 ### Deliverables
-- [ ] Full auth flow on FastAPI
-- [ ] User management CRUD
-- [ ] Preference management
-- [ ] Password change working
+- [x] Full auth flow on FastAPI (login/refresh/register/me/logout/verify)
+- [ ] User management CRUD (list/get/update/delete)
+- [ ] Preference management (notification + UI)
+- [ ] Password change working (self and admin)
 
 ### Notes
-```
-<!-- Add implementation notes here -->
+Planned implementation + parity requirements (before coding):
+
+#### 6A — Users read
+- `GET /api/v2/auth/users` (admin-only): match Flask response shape: `{"count": N, "users": [...]}`.
+- `GET /api/v2/auth/users/{id}` (JWT): admin can view any; non-admin can view only self; match Flask: `{"user": {...}}`.
+
+#### 6B — User update
+- `PUT /api/v2/auth/users/{id}`:
+  - Self-update: email + password only
+  - Admin update: email + password + role + is_active
+  - Validate: unique email (409), password length ≥ 6, role in {admin,user,viewer}
+  - Match Flask response shape: `{"message":"User updated successfully","updated_fields":[...],"user":{...}}`
+
+#### 6C — User delete
+- `DELETE /api/v2/auth/users/{id}` (admin-only):
+  - Guard: cannot delete yourself (400)
+  - Match Flask response shape: `{"message":"User deleted successfully","deleted_user":{"id":"...","username":"..."}}`
+
+#### 6D — Notification preferences
+- `GET /api/v2/auth/users/{id}/preferences`:
+  - Admin can access any; non-admin only self (403 on others)
+  - Get-or-create behavior with Flask defaults
+  - Match Flask response shape: `{"message":"Notification preferences retrieved successfully","preferences":{...}}`
+- `PUT /api/v2/auth/users/{id}/preferences`:
+  - Partial update allowed (fields optional); defaults preserved for omitted keys
+  - Match Flask response shape: `{"message":"Notification preferences updated successfully","preferences":{...}}`
+
+#### 6E — UI preferences
+- `GET /api/v2/auth/users/{id}/ui-preferences`:
+  - Admin can access any; non-admin only self
+  - Get-or-create behavior
+  - Match Flask response shape: `{"preferences":{"jobs_table_columns":{...}}}`
+- `PUT /api/v2/auth/users/{id}/ui-preferences`:
+  - Require `jobs_table_columns` object
+  - Normalize to allowed column keys (match Flask default keys + boolean values)
+  - Match Flask response shape: `{"preferences":{"jobs_table_columns":{...}}}`
+
+Verification target after implementation:
+```bash
+venv/bin/python -m pytest -q tests_fastapi
 ```
 
 ---

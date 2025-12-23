@@ -15,6 +15,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.responses import JSONResponse
 from sqlalchemy import select, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -258,6 +259,50 @@ async def get_me(current_user: CurrentUser):
     Returns the authenticated user's profile data.
     """
     return UserResponse.model_validate(current_user)
+
+
+# ============================================================================
+# User Management Endpoints (Phase 6A)
+# ============================================================================
+
+@router.get(
+    "/users",
+    summary="List users",
+    description="Admin-only. Matches Flask `/api/auth/users` response shape.",
+    tags=["Users"],
+)
+async def list_users(
+    _: AdminUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    result = await db.execute(select(User))
+    users = result.scalars().all()
+    return JSONResponse(status_code=200, content={"count": len(users), "users": [user.to_dict() for user in users]})
+
+
+@router.get(
+    "/users/{user_id}",
+    summary="Get user",
+    description="Admins can view any user; non-admins can only view themselves. Matches Flask `/api/auth/users/<id>` response shape.",
+    tags=["Users"],
+)
+async def get_user(
+    user_id: str,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if current_user.role != "admin" and current_user.id != user_id:
+        return JSONResponse(
+            status_code=403,
+            content={"error": "Forbidden. You can only view your own profile."},
+        )
+
+    result = await db.execute(select(User).where(User.id == user_id).limit(1))
+    user = result.scalar_one_or_none()
+    if not user:
+        return JSONResponse(status_code=404, content={"error": "User not found"})
+
+    return JSONResponse(status_code=200, content={"user": user.to_dict()})
 
 
 # ============================================================================
