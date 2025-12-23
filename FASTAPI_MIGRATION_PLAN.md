@@ -891,7 +891,7 @@ venv/bin/python -m pytest -q tests_fastapi
 
 ## Phase 8: Scheduler Migration & Cutover (Days 25-30)
 
-### Status: ⬜ Not Started
+### Status: 🟨 In Progress (8A ✅)
 
 ### Objective
 Migrate APScheduler runtime + scheduler side-effects to FastAPI and complete the cutover from Flask.
@@ -905,37 +905,72 @@ This phase explicitly includes the **scheduler side-effects deferred from Phase 
 - **Scheduler startup/shutdown** under FastAPI lifespan
 - **Single-runner guarantees** (lock file / leader election)
 
-### Tasks
+### Sub-Phases (Execution Order)
 
-- [ ] Refactor scheduler runtime to be framework-agnostic
-  - [ ] Refactor `src/scheduler/job_executor.py` to remove Flask app context coupling
-  - [ ] Use shared DB utilities (`src/database/session.py`) instead of `current_app`/Flask globals
-  - [ ] Ensure all timestamps/timezones match Flask behavior (JST cron interpretation)
+Phase 8 is split to keep scheduler changes safe and reviewable. **No Phase 8 implementation should start until you confirm the sub-phase plan.**
 
-- [ ] Implement scheduler lifecycle in FastAPI
-  - [ ] Start scheduler in FastAPI lifespan when `SCHEDULER_ENABLED=true`
-  - [ ] Add/keep a lock mechanism (similar to Flask’s `src/instance/scheduler.lock`) so only one process runs schedules
-  - [ ] Graceful shutdown: stop scheduler and release lock
+| Sub-Phase | Scope | Key Deliverables | Planned Tests |
+|----------|-------|------------------|--------------|
+| **8A ✅** | Scheduler core refactor (framework-agnostic) | `src/scheduler` no longer depends on Flask app context for DB work; uses `src/database/session.py` | `tests_fastapi/scheduler/test_scheduler_core.py` |
+| **8B** | Single-runner guarantees | Lock/leader election equivalent to Flask `scheduler.lock`; safe for multi-worker | `tests_fastapi/scheduler/test_scheduler_lock.py` |
+| **8C** | FastAPI lifecycle integration | Start/stop APScheduler in FastAPI lifespan; expose status via health | `tests_fastapi/scheduler/test_scheduler_lifecycle.py` |
+| **8D** | Job write side-effects wiring | Create/update/delete/enable/disable schedule updates (best-effort when scheduler not running in-process) | `tests_fastapi/scheduler/test_scheduler_side_effects.py` |
+| **8E** | Scheduler regression tests | Timezone correctness (JST), end_date behavior, duplicate prevention | `tests_fastapi/scheduler/test_scheduler_regression.py` |
+| **8F** | Cutover plan + deprecation | Frontend base URL/proxy cutover, monitoring, rollback steps | Docs + runbooks |
 
-- [ ] Implement scheduler side-effects for job writes (deferred from Phase 5)
-  - [ ] On `POST /api/v2/jobs`: schedule new job if active
-  - [ ] On `PUT /api/v2/jobs/{id}`: reschedule if cron/active state changes
-  - [ ] On `DELETE /api/v2/jobs/{id}`: remove from scheduler (or disable, matching Flask behavior)
-  - [ ] Ensure behavior is safe when scheduler is not running in the current process (best-effort + no hard failure)
+### Detailed Plan (Per Sub-Phase)
 
-- [ ] Scheduler + cutover test plan
-  - [ ] Add integration tests for scheduler leadership/lock (single runner)
-  - [ ] Add tests asserting side-effects happen only when scheduler is running/enabled
-  - [ ] Run full regression:
-    - [ ] `venv/bin/python -m pytest -q tests_fastapi`
-    - [ ] `venv/bin/python -m pytest -q test`
+#### 8A — Scheduler core refactor (framework-agnostic)
+- Goal: remove Flask coupling from scheduler execution path.
+- Tasks:
+  - Refactor `src/scheduler/job_executor.py` to avoid Flask `app_context()` patterns.
+  - Use async DB sessions via `src/database/session.py` where needed (or a thin adapter layer if scheduler remains sync).
+  - Ensure cron timezone behavior matches current Flask production behavior (`Asia/Tokyo` interpretation).
+- Output: scheduler logic callable from both Flask and FastAPI without importing either framework.
 
-- [ ] Cutover steps
-  - [ ] Update frontend API base URL to `/api/v2`
-  - [ ] Configure proxy redirect `/api/*` → `/api/v2/*` (or switch frontend env)
-  - [ ] Monitor for 1 week with fallback plan
-  - [ ] Remove Flask code and dependencies after stability window
-  - [ ] Update docs + `requirements.txt` cleanup
+Implemented:
+- `src/scheduler/job_executor.py` now performs DB work via `src/database/session.py` (no Flask globals); Flask-Mail email sending stays injectable for later phases.
+- Tests: `tests_fastapi/scheduler/test_scheduler_core.py`
+
+#### 8B — Single-runner guarantees (lock/leader election)
+- Goal: prevent multiple schedulers running in multi-process deployments.
+- Tasks:
+  - Implement lock mechanism similar to Flask `src/instance/scheduler.lock` (file lock or DB lock).
+  - Ensure lock is acquired on startup and released on shutdown; tolerate stale locks.
+  - Ensure only the leader process performs scheduling; non-leaders do not schedule but still serve API.
+
+#### 8C — FastAPI lifecycle integration
+- Goal: run APScheduler under FastAPI lifespan when enabled.
+- Tasks:
+  - Start scheduler in FastAPI lifespan when `SCHEDULER_ENABLED=true` and lock acquired.
+  - Gracefully stop scheduler on shutdown and release lock.
+  - Update `/api/v2/health` to report `scheduler_running` and `scheduled_jobs_count`.
+
+#### 8D — Job write side-effects wiring
+- Goal: ensure job CRUD impacts the scheduler.
+- Tasks:
+  - On `POST /api/v2/jobs`: schedule job if `is_active=true`.
+  - On `PUT /api/v2/jobs/{id}`: reschedule if cron changes; add/remove schedule if `is_active` toggles.
+  - On `DELETE /api/v2/jobs/{id}`: remove from scheduler (or disable, matching Flask behavior).
+  - Safety: if scheduler is not running in this process (no lock), API still succeeds and only DB state changes.
+
+#### 8E — Scheduler regression tests
+- Add scheduler test suite under `tests_fastapi/scheduler/`:
+  - Lock/leader election behavior (single runner)
+  - Side-effects only when scheduler enabled + leader
+  - Timezone correctness (JST cron)
+  - No duplicate schedules
+
+#### 8F — Cutover plan + deprecation
+- Cutover steps:
+  - Update frontend API base URL to `/api/v2`
+  - Configure proxy redirect `/api/*` → `/api/v2/*` (or switch frontend env)
+  - Monitor for 1 week with rollback plan
+  - Remove Flask code + dependencies after stability window (final cleanup)
+
+### Validation & Regression
+- FastAPI suite (must pass): `venv/bin/python -m pytest -q tests_fastapi`
+- Legacy Flask suite (target to pass by Phase 8 end): `venv/bin/python -m pytest -q test`
 
 ### Frontend Changes Required
 
@@ -980,8 +1015,7 @@ async def execute_job_async(job_id):
 
 ```
 src/
-├── main.py                    # FastAPI app entry
-├── config.py                  # Pydantic Settings
+├── app.py                     # Flask app (during migration)
 ├── database/
 │   ├── __init__.py
 │   ├── engine.py              # SQLAlchemy engine
@@ -997,41 +1031,40 @@ src/
 │   ├── slack_settings.py
 │   ├── notification_preferences.py
 │   └── ui_preferences.py
-├── schemas/                   # Pydantic models
+├── fastapi_app/
 │   ├── __init__.py
-│   ├── user.py
-│   ├── job.py
-│   ├── execution.py
-│   ├── notification.py
-│   ├── category.py
-│   ├── team.py
-│   ├── settings.py
-│   └── common.py
-├── routers/                   # FastAPI routers
-│   ├── __init__.py
-│   ├── auth.py
-│   ├── jobs.py
-│   ├── executions.py
-│   ├── notifications.py
-│   ├── categories.py
-│   ├── teams.py
-│   └── settings.py
-├── dependencies/              # FastAPI dependencies
-│   ├── __init__.py
-│   ├── auth.py
-│   └── database.py
+│   ├── main.py                # FastAPI app entry
+│   ├── config.py              # Pydantic Settings
+│   ├── dependencies/
+│   │   ├── __init__.py
+│   │   ├── auth.py
+│   │   └── database.py
+│   ├── routers/
+│   │   ├── __init__.py
+│   │   ├── auth.py
+│   │   ├── jobs.py
+│   │   ├── executions.py
+│   │   ├── notifications.py
+│   │   ├── taxonomy.py
+│   │   ├── taxonomy_write.py
+│   │   └── settings.py
+│   ├── schemas/
+│   │   ├── __init__.py
+│   │   └── ...
+│   └── utils/
+│       ├── __init__.py
+│       ├── slack.py
+│       └── notifications.py
 ├── services/                  # Business logic
 │   ├── __init__.py
 │   └── end_date_maintenance.py
-├── scheduler/                 # APScheduler (refactored)
+├── scheduler/                 # APScheduler (Phase 8)
 │   ├── __init__.py
 │   └── job_executor.py
-└── utils/                     # Utilities (async)
+└── utils/                     # Flask utilities (sync)
     ├── __init__.py
-    ├── email.py
     ├── slack.py
-    ├── notifications.py
-    └── api_errors.py
+    └── ...
 ```
 
 ---
