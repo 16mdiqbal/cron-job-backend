@@ -21,6 +21,10 @@ from ..schemas.notifications_read import (
     NotificationsRangePayload,
     NotificationsReadResponse,
     NotificationsUnreadCountResponse,
+    NotificationMarkReadResponse,
+    NotificationsReadAllResponse,
+    NotificationDeleteResponse,
+    NotificationsDeleteReadResponse,
     NotificationReadPayload,
 )
 from ...database.session import get_db
@@ -197,3 +201,179 @@ async def get_unread_count(
             },
         )
 
+
+@router.put(
+    "/notifications/{notification_id}/read",
+    response_model=NotificationMarkReadResponse,
+    tags=["Notifications"],
+    summary="Mark notification as read",
+    description="Matches Flask `/api/notifications/<id>/read` response shape.",
+)
+async def mark_notification_read(
+    notification_id: str,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    try:
+        result = await db.execute(select(Notification).where(Notification.id == notification_id))
+        notification = result.scalar_one_or_none()
+        if not notification:
+            return JSONResponse(status_code=404, content={"error": "Notification not found"})
+
+        if notification.user_id != current_user.id:
+            return JSONResponse(
+                status_code=403,
+                content={"error": "Forbidden: Cannot access other users notifications"},
+            )
+
+        if not notification.is_read:
+            notification.is_read = True
+            notification.read_at = datetime.utcnow()
+            await db.commit()
+            await db.refresh(notification)
+
+        return NotificationMarkReadResponse(
+            message="Notification marked as read",
+            notification=NotificationReadPayload.model_validate(notification.to_dict()),
+        )
+    except Exception as exc:
+        logger.exception("Error marking notification as read")
+        settings = get_settings()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": ERROR_INTERNAL_SERVER,
+                "message": str(exc) if settings.expose_error_details else ERROR_INTERNAL_SERVER,
+            },
+        )
+
+
+@router.put(
+    "/notifications/read-all",
+    response_model=NotificationsReadAllResponse,
+    tags=["Notifications"],
+    summary="Mark all notifications as read",
+    description="Matches Flask `/api/notifications/read-all` response shape.",
+)
+async def mark_all_notifications_read(
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    try:
+        now = datetime.utcnow()
+        update_stmt = (
+            Notification.__table__.update()
+            .where(Notification.user_id == current_user.id)
+            .where(Notification.is_read.is_(False))
+            .values(is_read=True, read_at=now)
+        )
+        result = await db.execute(update_stmt)
+        await db.commit()
+
+        updated_count = int(result.rowcount or 0)
+        return NotificationsReadAllResponse(message="All notifications marked as read", updated_count=updated_count)
+    except Exception as exc:
+        logger.exception("Error marking all notifications as read")
+        settings = get_settings()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": ERROR_INTERNAL_SERVER,
+                "message": str(exc) if settings.expose_error_details else ERROR_INTERNAL_SERVER,
+            },
+        )
+
+
+@router.delete(
+    "/notifications/delete-read",
+    response_model=NotificationsDeleteReadResponse,
+    tags=["Notifications"],
+    summary="Delete read notifications",
+    description="Matches Flask `/api/notifications/delete-read` response shape.",
+)
+async def delete_read_notifications(
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    from_: Optional[str] = Query(None, alias="from"),
+    to: Optional[str] = Query(None),
+):
+    try:
+        try:
+            from_dt = _parse_iso_date_or_datetime_utc_naive(from_)
+            to_dt = _parse_iso_date_or_datetime_utc_naive(to)
+        except ValueError:
+            return JSONResponse(status_code=400, content={"error": "Invalid date", "message": "Invalid date"})
+
+        if to and to_dt and len(to.strip()) == 10:
+            to_dt = to_dt + timedelta(days=1)
+
+        if from_dt and to_dt and from_dt >= to_dt:
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Invalid date range", "message": '"from" must be earlier than "to".'},
+            )
+
+        conditions = [Notification.user_id == current_user.id, Notification.is_read.is_(True)]
+        if from_dt:
+            conditions.append(Notification.created_at >= from_dt)
+        if to_dt:
+            conditions.append(Notification.created_at < to_dt)
+
+        count_query = select(func.count()).select_from(Notification).where(*conditions)
+        deleted_count = int((await db.execute(count_query)).scalar_one() or 0)
+
+        if deleted_count:
+            delete_stmt = Notification.__table__.delete().where(*conditions)
+            await db.execute(delete_stmt)
+            await db.commit()
+
+        return NotificationsDeleteReadResponse(deleted_count=deleted_count)
+    except Exception as exc:
+        logger.exception("Error deleting read notifications")
+        settings = get_settings()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": ERROR_INTERNAL_SERVER,
+                "message": str(exc) if settings.expose_error_details else ERROR_INTERNAL_SERVER,
+            },
+        )
+
+
+@router.delete(
+    "/notifications/{notification_id}",
+    response_model=NotificationDeleteResponse,
+    tags=["Notifications"],
+    summary="Delete notification",
+    description="Matches Flask `/api/notifications/<id>` response shape.",
+)
+async def delete_notification(
+    notification_id: str,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    try:
+        result = await db.execute(select(Notification).where(Notification.id == notification_id))
+        notification = result.scalar_one_or_none()
+        if not notification:
+            return JSONResponse(status_code=404, content={"error": "Notification not found"})
+
+        if notification.user_id != current_user.id:
+            return JSONResponse(
+                status_code=403,
+                content={"error": "Forbidden: Cannot delete other users notifications"},
+            )
+
+        await db.delete(notification)
+        await db.commit()
+        return NotificationDeleteResponse(message="Notification deleted successfully")
+    except Exception as exc:
+        logger.exception("Error deleting notification")
+        settings = get_settings()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": ERROR_INTERNAL_SERVER,
+                "message": str(exc) if settings.expose_error_details else ERROR_INTERNAL_SERVER,
+            },
+        )

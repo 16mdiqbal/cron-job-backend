@@ -42,3 +42,20 @@ class NotificationsUnreadCountResponse(BaseModel):
     unread_count: int
     range: NotificationsRangePayload
 
+
+class NotificationMarkReadResponse(BaseModel):
+    message: str
+    notification: NotificationReadPayload
+
+
+class NotificationsReadAllResponse(BaseModel):
+    message: str
+    updated_count: int
+
+
+class NotificationDeleteResponse(BaseModel):
+    message: str
+
+
+class NotificationsDeleteReadResponse(BaseModel):
+    deleted_count: int

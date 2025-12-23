@@ -723,7 +723,7 @@ venv/bin/python -m pytest -q tests_fastapi
 
 ## Phase 7: Notifications & Settings (Days 22-24)
 
-### Status: 🟨 In Progress (7A ✅)
+### Status: 🟨 In Progress (7A ✅, 7B ✅, 7C ✅)
 
 ### Objective
 Complete remaining endpoints (Notifications, Slack Settings, Category/Team write) and any required supporting utilities.
@@ -734,10 +734,10 @@ Complete remaining endpoints (Notifications, Slack Settings, Category/Team write
 |---|----------------|------------------|--------|
 | 1 | `GET /api/notifications` | `GET /api/v2/notifications` | ✅ |
 | 2 | `GET /api/notifications/unread-count` | `GET /api/v2/notifications/unread-count` | ✅ |
-| 3 | `PUT /api/notifications/<id>/read` | `PUT /api/v2/notifications/{id}/read` | ⬜ |
-| 4 | `PUT /api/notifications/read-all` | `PUT /api/v2/notifications/read-all` | ⬜ |
-| 5 | `DELETE /api/notifications/<id>` | `DELETE /api/v2/notifications/{id}` | ⬜ |
-| 6 | `DELETE /api/notifications/delete-read` | `DELETE /api/v2/notifications/delete-read` | ⬜ |
+| 3 | `PUT /api/notifications/<id>/read` | `PUT /api/v2/notifications/{id}/read` | ✅ |
+| 4 | `PUT /api/notifications/read-all` | `PUT /api/v2/notifications/read-all` | ✅ |
+| 5 | `DELETE /api/notifications/<id>` | `DELETE /api/v2/notifications/{id}` | ✅ |
+| 6 | `DELETE /api/notifications/delete-read` | `DELETE /api/v2/notifications/delete-read` | ✅ |
 | 7 | `GET /api/settings/slack` | `GET /api/v2/settings/slack` | ⬜ |
 | 8 | `PUT /api/settings/slack` | `PUT /api/v2/settings/slack` | ⬜ |
 | 9 | `POST /api/job-categories` | `POST /api/v2/job-categories` | ⬜ |
@@ -754,8 +754,8 @@ This phase is intentionally split by **logical API grouping** to keep each unit 
 | Sub-Phase | Scope | Endpoints | Primary Tests |
 |----------|-------|-----------|---------------|
 | **7A ✅** | Notifications (Read) | `GET /api/v2/notifications`, `GET /api/v2/notifications/unread-count` | `tests_fastapi/notifications/test_notifications_read.py` |
-| **7B** | Notifications (Mark Read) | `PUT /api/v2/notifications/{id}/read`, `PUT /api/v2/notifications/read-all` | `tests_fastapi/notifications/test_notifications_mark_read.py` |
-| **7C** | Notifications (Delete) | `DELETE /api/v2/notifications/{id}`, `DELETE /api/v2/notifications/delete-read` | `tests_fastapi/notifications/test_notifications_delete.py` |
+| **7B ✅** | Notifications (Mark Read) | `PUT /api/v2/notifications/{id}/read`, `PUT /api/v2/notifications/read-all` | `tests_fastapi/notifications/test_notifications_mark_read.py` |
+| **7C ✅** | Notifications (Delete) | `DELETE /api/v2/notifications/{id}`, `DELETE /api/v2/notifications/delete-read` | `tests_fastapi/notifications/test_notifications_delete.py` |
 | **7D** | Settings (Slack) | `GET /api/v2/settings/slack`, `PUT /api/v2/settings/slack` | `tests_fastapi/settings/test_slack_settings.py` |
 | **7E** | Job Categories (Write) | `POST/PUT/DELETE /api/v2/job-categories` | `tests_fastapi/taxonomy_write/test_job_categories_write.py` |
 | **7F** | PIC Teams (Write) | `POST/PUT/DELETE /api/v2/pic-teams` | `tests_fastapi/taxonomy_write/test_pic_teams_write.py` |
