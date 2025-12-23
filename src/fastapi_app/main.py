@@ -80,10 +80,16 @@ async def lifespan(app: FastAPI):
     print(f"🚀 Starting {settings.app_name} v{settings.app_version}")
     print(f"📚 API Documentation available at: http://{settings.host}:{settings.port}/docs")
     print(f"📖 ReDoc available at: http://{settings.host}:{settings.port}/redoc")
+
+    # Phase 8C: Scheduler lifecycle under FastAPI lifespan (leader-only via lock).
+    from .scheduler_runtime import start_scheduler
+    start_scheduler()
     
     yield  # Application runs here
     
     # Shutdown
+    from .scheduler_runtime import stop_scheduler
+    stop_scheduler()
     print("👋 Shutting down FastAPI application...")
 
 
@@ -227,14 +233,17 @@ def register_routers(app: FastAPI) -> None:
         Use this endpoint for monitoring and load balancer health checks.
         """
         settings = get_settings()
+        from .scheduler_runtime import get_status
+
+        sched = get_status()
         return HealthResponse(
             status="healthy",
             service="cron-job-scheduler-fastapi",
             version=settings.app_version,
             timestamp=datetime.now(timezone.utc),
             api="v2",
-            scheduler_running=False,  # Will be updated when scheduler is migrated
-            scheduled_jobs_count=0,
+            scheduler_running=sched.running,
+            scheduled_jobs_count=sched.scheduled_jobs_count,
             docs_url=f"http://localhost:{settings.port}/docs"
         )
     
