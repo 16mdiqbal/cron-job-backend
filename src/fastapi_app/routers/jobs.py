@@ -7,6 +7,8 @@ Implements:
 - GET /api/v2/jobs
 - GET /api/v2/jobs/{job_id}
 - POST /api/v2/jobs (Phase 5A)
+- PUT /api/v2/jobs/{job_id} (Phase 5B)
+- DELETE /api/v2/jobs/{job_id} (Phase 5C)
 """
 
 import logging
@@ -589,6 +591,51 @@ async def update_job(
     except Exception as exc:
         await db.rollback()
         logger.exception("Error updating job %s", job_id)
+        settings = get_settings()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": ERROR_INTERNAL_SERVER,
+                "message": str(exc) if settings.expose_error_details else ERROR_INTERNAL_SERVER,
+            },
+        )
+
+
+@router.delete(
+    "/{job_id}",
+    status_code=200,
+    summary="Delete job",
+    description="Delete a job. Phase 5 is DB-first (no APScheduler scheduling side-effects in FastAPI).",
+)
+async def delete_job(
+    job_id: str,
+    current_user: UserOrAdmin,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    try:
+        job_result = await db.execute(select(Job).where(Job.id == job_id).limit(1))
+        job = job_result.scalar_one_or_none()
+        if not job:
+            return JSONResponse(
+                status_code=404,
+                content={"error": ERROR_JOB_NOT_FOUND, "message": f"No job found with ID: {job_id}"},
+            )
+
+        if current_user.role != "admin" and job.created_by != current_user.id:
+            return JSONResponse(
+                status_code=403,
+                content={"error": "Insufficient permissions", "message": "You can only delete your own jobs"},
+            )
+
+        deleted_job = {"id": job.id, "name": job.name}
+
+        await db.delete(job)
+        await db.commit()
+
+        return JSONResponse(status_code=200, content={"message": "Job deleted successfully", "deleted_job": deleted_job})
+    except Exception as exc:
+        await db.rollback()
+        logger.exception("Error deleting job %s", job_id)
         settings = get_settings()
         return JSONResponse(
             status_code=500,
