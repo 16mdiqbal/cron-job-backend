@@ -9,17 +9,21 @@ Implements:
 - POST /api/v2/jobs (Phase 5A)
 - PUT /api/v2/jobs/{job_id} (Phase 5B)
 - DELETE /api/v2/jobs/{job_id} (Phase 5C)
+- POST /api/v2/jobs/{job_id}/execute (Phase 5D)
 """
 
 import logging
+import os
 import re
 from datetime import date, datetime
 from typing import Annotated, Optional, Any
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from apscheduler.triggers.cron import CronTrigger
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse
+import httpx
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -636,6 +640,219 @@ async def delete_job(
     except Exception as exc:
         await db.rollback()
         logger.exception("Error deleting job %s", job_id)
+        settings = get_settings()
+        return JSONResponse(
+            status_code=500,
+            content={
+                "error": ERROR_INTERNAL_SERVER,
+                "message": str(exc) if settings.expose_error_details else ERROR_INTERNAL_SERVER,
+            },
+        )
+
+
+def _truncate_output(value: str, limit: int = 1000) -> str:
+    if not value:
+        return ""
+    return value[:limit] if len(value) > limit else value
+
+
+def _parse_dispatch_url(value: str) -> tuple[str, str, str]:
+    candidate = value if "://" in value else f"https://{value}"
+    parsed = urlparse(candidate)
+    path = (parsed.path or "").strip("/")
+    parts = [p for p in path.split("/") if p]
+    if len(parts) >= 5 and parts[2] == "actions" and parts[3] == "workflows":
+        return parts[0], parts[1], parts[4]
+    raise ValueError("Invalid dispatch URL format. Expected /<owner>/<repo>/actions/workflows/<workflow>.")
+
+
+async def _http_request(
+    method: str,
+    url: str,
+    *,
+    headers: Optional[dict[str, str]] = None,
+    json_payload: Any = None,
+) -> tuple[int, str]:
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.request(method, url, headers=headers, json=json_payload)
+        return int(resp.status_code), resp.text or ""
+
+
+@router.post(
+    "/{job_id}/execute",
+    status_code=200,
+    summary="Execute job now",
+    description="Execute a job immediately (manual trigger). Overrides are not persisted. Phase 5 is DB-first (no APScheduler side-effects).",
+)
+async def execute_job_now(
+    job_id: str,
+    request: Request,
+    current_user: UserOrAdmin,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    try:
+        job_result = await db.execute(select(Job).where(Job.id == job_id).limit(1))
+        job = job_result.scalar_one_or_none()
+        if not job:
+            return JSONResponse(
+                status_code=404,
+                content={"error": ERROR_JOB_NOT_FOUND, "message": f"No job found with ID: {job_id}"},
+            )
+
+        if current_user.role != "admin" and job.created_by != current_user.id:
+            return JSONResponse(
+                status_code=403,
+                content={"error": "Insufficient permissions", "message": "You can only execute your own jobs"},
+            )
+
+        if job.end_date and job.end_date < _today_jst():
+            if job.is_active:
+                job.is_active = False
+                await db.commit()
+                await db.refresh(job)
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Job expired", "message": "This job has passed its end_date and was auto-paused."},
+            )
+
+        raw_body = await request.body()
+        if not raw_body or not raw_body.strip():
+            data: dict[str, Any] = {}
+        else:
+            content_type = (request.headers.get("content-type") or "").lower()
+            if "application/json" not in content_type:
+                return JSONResponse(status_code=400, content={"error": "Content-Type must be application/json"})
+            try:
+                data = await request.json()
+            except Exception:
+                return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+            if not isinstance(data, dict):
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": "Invalid payload", "message": "JSON body must be an object."},
+                )
+
+        override_metadata = data.get("metadata")
+        if override_metadata is not None and not isinstance(override_metadata, dict):
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Invalid payload", "message": '"metadata" must be a JSON object.'},
+            )
+
+        github_token = (data.get("github_token") or "").strip() or None
+        dispatch_url = (data.get("dispatch_url") or "").strip() or None
+
+        base_config: dict[str, Any] = {
+            "target_url": job.target_url,
+            "github_owner": job.github_owner,
+            "github_repo": job.github_repo,
+            "github_workflow_name": job.github_workflow_name,
+            "metadata": job.get_metadata(),
+        }
+
+        if job.target_url:
+            if "target_url" in data:
+                base_config["target_url"] = (data.get("target_url") or "").strip() or job.target_url
+        else:
+            if dispatch_url:
+                try:
+                    owner, repo, workflow_name = _parse_dispatch_url(dispatch_url)
+                except ValueError as exc:
+                    return JSONResponse(status_code=400, content={"error": "Invalid payload", "message": str(exc)})
+                base_config["github_owner"] = owner
+                base_config["github_repo"] = repo
+                base_config["github_workflow_name"] = workflow_name
+
+            if "github_owner" in data:
+                base_config["github_owner"] = (data.get("github_owner") or "").strip() or job.github_owner
+            if "github_repo" in data:
+                base_config["github_repo"] = (data.get("github_repo") or "").strip() or job.github_repo
+            if "github_workflow_name" in data:
+                base_config["github_workflow_name"] = (data.get("github_workflow_name") or "").strip() or job.github_workflow_name
+            if github_token:
+                base_config["github_token"] = github_token
+
+        if override_metadata is not None:
+            base_config["metadata"] = override_metadata
+
+        if not base_config.get("target_url") and not (
+            base_config.get("github_owner") and base_config.get("github_repo") and base_config.get("github_workflow_name")
+        ):
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Missing target configuration", "message": "Job has no valid target configuration to execute."},
+            )
+
+        execution = JobExecution(job_id=job.id, trigger_type="manual", status="running")
+        db.add(execution)
+        await db.commit()
+        await db.refresh(execution)
+
+        try:
+            if base_config.get("github_owner") and base_config.get("github_repo") and base_config.get("github_workflow_name"):
+                owner = base_config["github_owner"]
+                repo = base_config["github_repo"]
+                workflow_name = base_config["github_workflow_name"]
+                metadata = base_config.get("metadata") if isinstance(base_config.get("metadata"), dict) else {}
+
+                execution.execution_type = "github_actions"
+                execution.target = f"{owner}/{repo}/{workflow_name}"
+                await db.commit()
+
+                token = base_config.get("github_token") or os.getenv("GITHUB_TOKEN")
+                if not token:
+                    error_msg = f"GitHub token not configured. Cannot trigger workflow for job '{job.name}'"
+                    execution.mark_completed("failed", error_message=error_msg)
+                    await db.commit()
+                    return JSONResponse(status_code=200, content={"message": "Job triggered successfully", "job_id": job.id})
+
+                url = f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/{workflow_name}/dispatches"
+                headers = {
+                    "Authorization": f"Bearer {token}",
+                    "Accept": "application/vnd.github+json",
+                    "Content-Type": "application/json",
+                }
+                ref = metadata.get("branchDetails", "master")
+                payload = {"ref": ref, "inputs": metadata}
+
+                status_code, text = await _http_request("POST", url, headers=headers, json_payload=payload)
+                if status_code == 204:
+                    execution.mark_completed("success", response_status=204, output=f"Workflow triggered successfully on branch {ref}")
+                else:
+                    error_msg = f"GitHub Actions dispatch failed. Status: {status_code}, Response: {_truncate_output(text)}"
+                    execution.mark_completed("failed", response_status=status_code, error_message=error_msg, output=_truncate_output(text))
+                await db.commit()
+            else:
+                target_url = base_config.get("target_url")
+                execution.execution_type = "webhook"
+                execution.target = target_url
+                await db.commit()
+
+                payload = base_config.get("metadata") if isinstance(base_config.get("metadata"), dict) else None
+                if payload:
+                    status_code, text = await _http_request("POST", target_url, json_payload=payload)
+                else:
+                    status_code, text = await _http_request("GET", target_url)
+
+                output = _truncate_output(text)
+                if 200 <= status_code < 300:
+                    execution.mark_completed("success", response_status=status_code, output=output)
+                else:
+                    execution.mark_completed(
+                        "failed",
+                        response_status=status_code,
+                        error_message=f"Webhook returned status {status_code}",
+                        output=output,
+                    )
+                await db.commit()
+        except Exception as exc:
+            execution.mark_completed("failed", error_message=f"Request failed: {exc}")
+            await db.commit()
+
+        return JSONResponse(status_code=200, content={"message": "Job triggered successfully", "job_id": job.id})
+    except Exception as exc:
+        await db.rollback()
+        logger.exception("Error executing job %s", job_id)
         settings = get_settings()
         return JSONResponse(
             status_code=500,
