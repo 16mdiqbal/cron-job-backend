@@ -1,5 +1,5 @@
 """
-Jobs Router (Read-Only).
+Jobs Router.
 
 Phase 4B: Migrate low-risk read endpoints first.
 
@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..config import get_settings
 from ..dependencies.auth import CurrentUser, UserOrAdmin
+from ..scheduler_side_effects import sync_job_schedule, unschedule_job
 from ..schemas.jobs_read import JobGetReadResponse, JobListReadResponse, JobReadPayload
 from ...database.session import get_db
 from ...models.job import Job
@@ -239,7 +240,7 @@ async def list_jobs(
     "/bulk-upload",
     status_code=200,
     summary="Bulk upload jobs from CSV",
-    description="Bulk create jobs from a CSV file. Phase 5 is DB-first (no APScheduler scheduling side-effects in FastAPI).",
+    description="Bulk create jobs from a CSV file. Phase 8D best-effort syncs APScheduler when the scheduler is running in this process.",
 )
 async def bulk_upload_jobs(
     current_user: UserOrAdmin,
@@ -275,6 +276,7 @@ async def bulk_upload_jobs(
 
         errors: list[dict[str, Any]] = []
         created_jobs: list[dict[str, Any]] = []
+        created_job_models: list[Job] = []
         seen_names: set[str] = set()
 
         for row_index, values in enumerate(normalized_rows, start=2):
@@ -460,6 +462,7 @@ async def bulk_upload_jobs(
             db.add(new_job)
             await db.flush()
 
+            created_job_models.append(new_job)
             created_jobs.append({"id": new_job.id, "name": new_job.name, "is_active": new_job.is_active})
 
         if is_dry_run:
@@ -477,6 +480,8 @@ async def bulk_upload_jobs(
             )
 
         await db.commit()
+        for job in created_job_models:
+            sync_job_schedule(job)
 
         return JSONResponse(
             status_code=200,
@@ -738,7 +743,7 @@ async def get_job(
     "",
     status_code=201,
     summary="Create job",
-    description="Create a new job. Phase 5 is DB-first (no APScheduler scheduling side-effects in FastAPI).",
+    description="Create a new job. Phase 8D best-effort syncs APScheduler when the scheduler is running in this process.",
 )
 async def create_job(
     request: Request,
@@ -886,6 +891,7 @@ async def create_job(
         db.add(new_job)
         await db.commit()
         await db.refresh(new_job)
+        sync_job_schedule(new_job)
 
         return JSONResponse(status_code=201, content={"message": "Job created successfully", "job": new_job.to_dict()})
     except Exception as exc:
@@ -904,7 +910,7 @@ async def create_job(
     "/{job_id}",
     status_code=200,
     summary="Update job",
-    description="Update an existing job. Phase 5 is DB-first (no APScheduler scheduling side-effects in FastAPI).",
+    description="Update an existing job. Phase 8D best-effort syncs APScheduler when the scheduler is running in this process.",
 )
 async def update_job(
     job_id: str,
@@ -1064,6 +1070,7 @@ async def update_job(
 
         await db.commit()
         await db.refresh(job)
+        sync_job_schedule(job)
 
         return JSONResponse(status_code=200, content={"message": "Job updated successfully", "job": job.to_dict()})
     except Exception as exc:
@@ -1083,7 +1090,7 @@ async def update_job(
     "/{job_id}",
     status_code=200,
     summary="Delete job",
-    description="Delete a job. Phase 5 is DB-first (no APScheduler scheduling side-effects in FastAPI).",
+    description="Delete a job. Phase 8D best-effort syncs APScheduler when the scheduler is running in this process.",
 )
 async def delete_job(
     job_id: str,
@@ -1107,6 +1114,7 @@ async def delete_job(
 
         deleted_job = {"id": job.id, "name": job.name}
 
+        unschedule_job(job.id)
         await db.delete(job)
         await db.commit()
 

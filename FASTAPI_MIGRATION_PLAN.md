@@ -879,7 +879,7 @@ This phase is intentionally split by **logical API grouping** to keep each unit 
 Verified:
 ```bash
 venv/bin/python -m pytest -q tests_fastapi
-# 203 passed
+# 215 passed
 ```
 
 ### Notes
@@ -891,7 +891,7 @@ venv/bin/python -m pytest -q tests_fastapi
 
 ## Phase 8: Scheduler Migration & Cutover (Days 25-30)
 
-### Status: 🟨 In Progress (8A ✅, 8B ✅, 8C ✅)
+### Status: 🟨 In Progress (8A ✅, 8B ✅, 8C ✅, 8D ✅)
 
 ### Objective
 Migrate APScheduler runtime + scheduler side-effects to FastAPI and complete the cutover from Flask.
@@ -914,7 +914,7 @@ Phase 8 is split to keep scheduler changes safe and reviewable. **No Phase 8 imp
 | **8A ✅** | Scheduler core refactor (framework-agnostic) | `src/scheduler` no longer depends on Flask app context for DB work; uses `src/database/session.py` | `tests_fastapi/scheduler/test_scheduler_core.py` |
 | **8B ✅** | Single-runner guarantees | Shared atomic lock file utility with stale lock handling | `tests_fastapi/scheduler/test_scheduler_lock.py` |
 | **8C ✅** | FastAPI lifecycle integration | Start/stop APScheduler in FastAPI lifespan; expose status via health | `tests_fastapi/scheduler/test_scheduler_lifecycle.py` |
-| **8D** | Job write side-effects wiring | Create/update/delete/enable/disable schedule updates (best-effort when scheduler not running in-process) | `tests_fastapi/scheduler/test_scheduler_side_effects.py` |
+| **8D ✅** | Job write side-effects wiring | Create/update/delete/enable/disable schedule updates (best-effort when scheduler not running in-process) | `tests_fastapi/scheduler/test_scheduler_side_effects.py` |
 | **8E** | Scheduler regression tests | Timezone correctness (JST), end_date behavior, duplicate prevention | `tests_fastapi/scheduler/test_scheduler_regression.py` |
 | **8F** | Cutover plan + deprecation | Frontend base URL/proxy cutover, monitoring, rollback steps | Docs + runbooks |
 
@@ -964,6 +964,11 @@ Implemented:
   - On `DELETE /api/v2/jobs/{id}`: remove from scheduler (or disable, matching Flask behavior).
   - Safety: if scheduler is not running in this process (no lock), API still succeeds and only DB state changes.
 
+Implemented:
+- Best-effort scheduler helpers: `src/fastapi_app/scheduler_side_effects.py`
+- Wired into job write endpoints: `src/fastapi_app/routers/jobs.py` (create/update/delete + bulk upload)
+- Tests: `tests_fastapi/scheduler/test_scheduler_side_effects.py`
+
 #### 8E — Scheduler regression tests
 - Add scheduler test suite under `tests_fastapi/scheduler/`:
   - Lock/leader election behavior (single runner)
@@ -1007,8 +1012,8 @@ async def execute_job_async(job_id):
 ```
 
 ### Deliverables
-- [ ] Scheduler running under FastAPI lifespan (single runner)
-- [ ] Scheduler side-effects wired into FastAPI job write endpoints (create/update/delete/enable/disable)
+- [x] Scheduler running under FastAPI lifespan (single runner)
+- [x] Scheduler side-effects wired into FastAPI job write endpoints (create/update/delete/enable/disable)
 - [ ] Frontend fully migrated to `/api/v2`
 - [ ] Proxy cutover completed with rollback option
 - [ ] Flask code removed after stability window
