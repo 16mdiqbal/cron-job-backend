@@ -13,7 +13,7 @@ Compatible with Flask-JWT-Extended for cross-stack SSO.
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.responses import JSONResponse
 from sqlalchemy import select, or_
@@ -303,6 +303,88 @@ async def get_user(
         return JSONResponse(status_code=404, content={"error": "User not found"})
 
     return JSONResponse(status_code=200, content={"user": user.to_dict()})
+
+
+@router.put(
+    "/users/{user_id}",
+    summary="Update user",
+    description="Admins can update any user's any field. Non-admins can only update their own email and password. Matches Flask `/api/auth/users/<id>` response shape.",
+    tags=["Users"],
+)
+async def update_user(
+    user_id: str,
+    request: Request,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    content_type = (request.headers.get("content-type") or "").lower()
+    if "application/json" not in content_type:
+        return JSONResponse(status_code=400, content={"error": "Content-Type must be application/json"})
+
+    is_self_update = current_user.id == user_id
+    is_admin = current_user.role == "admin"
+    if not is_admin and not is_self_update:
+        return JSONResponse(status_code=403, content={"error": "Forbidden. You can only update your own profile."})
+
+    result = await db.execute(select(User).where(User.id == user_id).limit(1))
+    user = result.scalar_one_or_none()
+    if not user:
+        return JSONResponse(status_code=404, content={"error": "User not found"})
+
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+    if not isinstance(data, dict):
+        return JSONResponse(status_code=400, content={"error": "Invalid payload", "message": "JSON body must be an object."})
+
+    updated_fields: list[str] = []
+
+    if "email" in data and data.get("email"):
+        new_email = str(data.get("email") or "").strip().lower()
+        if new_email:
+            existing_user = await db.execute(select(User).where(User.email == new_email).limit(1))
+            existing = existing_user.scalar_one_or_none()
+            if existing and existing.id != user_id:
+                return JSONResponse(status_code=409, content={"error": "Email already exists"})
+            user.email = new_email
+            updated_fields.append("email")
+
+    if "password" in data and data.get("password"):
+        new_password = str(data.get("password") or "")
+        if len(new_password) < 6:
+            return JSONResponse(status_code=400, content={"error": "Password must be at least 6 characters long"})
+        user.set_password(new_password)
+        updated_fields.append("password")
+
+    if "role" in data:
+        if not is_admin:
+            return JSONResponse(status_code=403, content={"error": "Only admins can change user roles"})
+        new_role = data.get("role")
+        if not User.validate_role(new_role):
+            return JSONResponse(
+                status_code=400,
+                content={"error": "Invalid role", "message": "Role must be one of: admin, user, viewer"},
+            )
+        user.role = str(new_role)
+        updated_fields.append("role")
+
+    if "is_active" in data:
+        if not is_admin:
+            return JSONResponse(status_code=403, content={"error": "Only admins can change user active status"})
+        user.is_active = bool(data.get("is_active"))
+        updated_fields.append("is_active")
+
+    if not updated_fields:
+        return JSONResponse(status_code=400, content={"error": "No valid fields to update"})
+
+    await db.commit()
+    await db.refresh(user)
+
+    return JSONResponse(
+        status_code=200,
+        content={"message": "User updated successfully", "updated_fields": updated_fields, "user": user.to_dict()},
+    )
 
 
 # ============================================================================
