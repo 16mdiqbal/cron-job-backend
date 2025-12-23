@@ -415,7 +415,7 @@ venv/bin/python -m pytest -q tests_fastapi
 
 ## Phase 5: Write Operations - Jobs CRUD (Days 13-17)
 
-### Status: ⏳ Planned (split into sub-phases)
+### Status: ✅ Complete (5A–5F)
 
 ### Objective
 Migrate job creation, update, and deletion with full validation.
@@ -430,14 +430,14 @@ Migrate job creation, update, and deletion with full validation.
 
 | # | Flask Endpoint | FastAPI Endpoint | Complexity | Status |
 |---|----------------|------------------|------------|--------|
-| 1 | `POST /api/jobs` | `POST /api/v2/jobs` | High | ⬜ |
-| 2 | `PUT /api/jobs/<id>` | `PUT /api/v2/jobs/{id}` | High | ⬜ |
-| 3 | `DELETE /api/jobs/<id>` | `DELETE /api/v2/jobs/{id}` | Medium | ⬜ |
-| 4 | `POST /api/jobs/<id>/execute` | `POST /api/v2/jobs/{id}/execute` | High | ⬜ |
-| 5 | `POST /api/jobs/bulk-upload` | `POST /api/v2/jobs/bulk-upload` | High | ⬜ |
-| 6 | `POST /api/jobs/validate-cron` | `POST /api/v2/jobs/validate-cron` | Low | ⬜ |
-| 7 | `POST /api/jobs/cron-preview` | `POST /api/v2/jobs/cron-preview` | Low | ⬜ |
-| 8 | `POST /api/jobs/test-run` | `POST /api/v2/jobs/test-run` | Medium | ⬜ |
+| 1 | `POST /api/jobs` | `POST /api/v2/jobs` | High | ✅ |
+| 2 | `PUT /api/jobs/<id>` | `PUT /api/v2/jobs/{id}` | High | ✅ |
+| 3 | `DELETE /api/jobs/<id>` | `DELETE /api/v2/jobs/{id}` | Medium | ✅ |
+| 4 | `POST /api/jobs/<id>/execute` | `POST /api/v2/jobs/{id}/execute` | High | ✅ |
+| 5 | `POST /api/jobs/bulk-upload` | `POST /api/v2/jobs/bulk-upload` | High | ✅ |
+| 6 | `POST /api/jobs/validate-cron` | `POST /api/v2/jobs/validate-cron` | Low | ✅ |
+| 7 | `POST /api/jobs/cron-preview` | `POST /api/v2/jobs/cron-preview` | Low | ✅ |
+| 8 | `POST /api/jobs/test-run` | `POST /api/v2/jobs/test-run` | Medium | ✅ |
 
 ### Sub-Phases (Execution Order)
 
@@ -461,26 +461,117 @@ Migrate job creation, update, and deletion with full validation.
 
 ### Test Strategy (Must-Haves)
 
-- **RBAC matrix** for each endpoint:
-  - `admin`: allowed
-  - `user`: allowed on own jobs; forbidden for other users where applicable
-  - `viewer`: forbidden for all write endpoints
+- **RBAC matrix**:
+  - `POST /api/v2/jobs` → `admin`, `user` allowed; `viewer` forbidden
+  - `PUT /api/v2/jobs/{id}` → `admin` allowed; `user` allowed **only for own jobs**; `viewer` forbidden
+  - `DELETE /api/v2/jobs/{id}` → `admin` allowed; `user` allowed **only for own jobs**; `viewer` forbidden
+  - `POST /api/v2/jobs/{id}/execute` → `admin` allowed; `user` allowed **only for own jobs**; `viewer` forbidden
+  - `POST /api/v2/jobs/bulk-upload` → `admin`, `user` allowed; `viewer` forbidden
+  - `POST /api/v2/jobs/test-run` → `admin`, `user` allowed; `viewer` forbidden
+  - `POST /api/v2/jobs/validate-cron`, `POST /api/v2/jobs/cron-preview` → **all authenticated roles** allowed (`admin`, `user`, `viewer`)
 - **Validation coverage**:
   - Required fields (`name`, `cron_expression`, `category`, `pic_team`, `end_date`)
   - Target config: webhook vs GitHub fields (mutual requirements)
   - Duplicate name conflict behavior
-  - Date range/cutoffs (`end_date` must be future)
+  - Date range/cutoffs (`end_date` must be **today or future** in scheduler timezone, default JST)
 - **Side-effect boundaries**:
   - Verify FastAPI does **not** register APScheduler jobs (no scheduler manipulation in Phase 5).
-  - Manual execute should not persist scheduler state changes.
+  - Manual execute should not persist scheduler state changes (but does create `JobExecution` rows, matching Flask).
 
 ### Deliverables
-- [ ] Phase 5A–5F endpoints implemented and documented
-- [ ] FastAPI tests added for each sub-phase and passing (`venv/bin/python -m pytest -q tests_fastapi`)
-- [ ] No APScheduler add/reschedule/remove logic in FastAPI (Phase 8 responsibility)
-- [ ] RBAC + validation coverage complete for write flows
+- [x] Phase 5A–5F endpoints implemented and documented
+- [x] FastAPI tests added for each sub-phase and passing (`venv/bin/python -m pytest -q tests_fastapi`)
+- [x] No APScheduler add/reschedule/remove logic in FastAPI (Phase 8 responsibility)
+- [x] RBAC + validation coverage complete for write flows
 
 ### Notes
+Implementation location:
+- `src/fastapi_app/routers/jobs.py` (read + write endpoints under `/api/v2/jobs/*`)
+
+#### 5A — Create job (`POST /api/v2/jobs`)
+- Auth: `admin` or `user`
+- Content-Type: `application/json`
+- Validations (high-level):
+  - `name` required + unique
+  - `cron_expression` must be a 5-field crontab string and parseable in scheduler timezone (default JST)
+  - `end_date` required and must be **today or future** (scheduler timezone)
+  - `pic_team` required and must exist + active
+  - `category` resolves from slug or name; defaults to `general`; must exist if not `general`
+  - Target config must be present: either `target_url` OR full GitHub config (`github_owner` optional default, `github_repo`, `github_workflow_name`)
+  - `metadata` must be a JSON object (dict)
+  - Notification fields are persisted but no email/slack/broadcast side-effects are executed in Phase 5
+- Response:
+  - `201`: `{"message":"Job created successfully","job":{...}}`
+  - Errors use `{"error": "...", "message": "..."}` where applicable
+- Tests: `tests_fastapi/jobs_write/test_create.py`
+
+#### 5B — Update job (`PUT /api/v2/jobs/{id}`)
+- Auth: `admin` or `user` (ownership enforced for `user`)
+- Content-Type: `application/json`
+- Validations (high-level):
+  - Cannot rename to an existing job name
+  - `cron_expression` must be valid 5-field crontab when present
+  - `end_date` must be **today or future** (scheduler timezone) when present
+  - `pic_team`/`category` validation rules same as create
+  - Target config must remain valid after update (cannot clear everything)
+  - Guard: cannot enable an expired job without updating `end_date`
+- Response:
+  - `200`: `{"message":"Job updated successfully","job":{...}}`
+- Tests: `tests_fastapi/jobs_write/test_update.py`
+
+#### 5C — Delete job (`DELETE /api/v2/jobs/{id}`)
+- Auth: `admin` or `user` (ownership enforced for `user`)
+- Scope note: no APScheduler removal here; deferred to Phase 8
+- Response:
+  - `200`: `{"message":"Job deleted successfully","deleted_job":{"id":"...","name":"..."}}`
+- Tests: `tests_fastapi/jobs_write/test_delete.py`
+
+#### 5D — Manual execute (`POST /api/v2/jobs/{id}/execute`)
+- Auth: `admin` or `user` (ownership enforced for `user`)
+- Behavior:
+  - Overrides are **not persisted** (metadata and target overrides apply only to the run)
+  - Creates a `JobExecution` row with `trigger_type="manual"` and updates it to `success`/`failed`
+  - If job `end_date` is in the past (scheduler timezone): auto-pauses the job (`is_active=false`) and returns `400`
+  - Webhook runs perform HTTP calls; GitHub runs dispatch workflows (requires token via payload `github_token` or env `GITHUB_TOKEN`)
+- Response:
+  - `200`: `{"message":"Job triggered successfully","job_id":"..."}`
+- Tests: `tests_fastapi/jobs_write/test_execute.py`
+
+#### 5E — Bulk CSV upload (`POST /api/v2/jobs/bulk-upload`)
+- Auth: `admin` or `user`
+- Content-Type: `multipart/form-data`
+- Form fields:
+  - `file` (required): CSV file
+  - `default_github_owner` (optional): default owner used when Repo column contains `repo` only
+  - `dry_run` (optional truthy): validate only (no DB writes)
+- CSV normalization:
+  - Drops columns with empty headers
+  - Removes fully-empty rows
+- Row mapping (supports multiple header variants):
+  - `Job Name`/`name`, `Cron Schedule (JST)`/`cron_expression`, `Status`, `Target URL`
+  - `Repo` (supports `owner/repo`), `Workflow Name`, optional `GitHub Owner`
+  - `Category`, `End Date`, `PIC Team`
+  - `Request Body` JSON object → job metadata; optional `Branch` → `metadata.branchDetails` when absent
+- Response:
+  - `200` always for row-level partial success (even with errors)
+  - `400` for structural CSV issues (e.g., empty file)
+  - Shape matches Flask: includes `dry_run`, `stats`, `created_count`, `error_count`, `errors`, `jobs`
+- Tests: `tests_fastapi/jobs_write/test_bulk_upload.py`
+
+#### 5F — Cron utilities
+- `POST /api/v2/jobs/validate-cron`:
+  - Auth: any authenticated role
+  - Returns `200` always with `{"valid": true/false, ...}` (matches Flask behavior)
+- `POST /api/v2/jobs/cron-preview`:
+  - Auth: any authenticated role
+  - Invalid cron returns `400`; valid cron returns `200` with `timezone`, `next_runs`, `count`
+- `POST /api/v2/jobs/test-run`:
+  - Auth: `admin` or `user`
+  - One-off test run without creating a Job or JobExecution
+  - Webhook path hits `target_url`; GitHub path dispatches workflow (requires env `GITHUB_TOKEN`)
+  - Returns `200` with `{ok,type,status_code,message}`; missing GitHub token returns `200` with `ok:false`
+- Tests: `tests_fastapi/cron_tools/*`
+
 Phase 5A implemented:
 - Endpoint: `POST /api/v2/jobs` (DB-first; no APScheduler scheduling side-effects)
 - Tests: `tests_fastapi/jobs_write/test_create.py`
@@ -508,6 +599,7 @@ Phase 5F implemented:
 Verified:
 ```bash
 venv/bin/python -m pytest -q tests_fastapi
+# 108 passed
 ```
 
 ---
@@ -1769,15 +1861,19 @@ diff <(echo "$flask_response" | jq -S '.jobs | sort_by(.id)') \
 
 | Test Case | Expected Result | Status |
 |-----------|-----------------|--------|
-| Create job with valid data | 201, job created | ⬜ |
-| Create job with invalid cron | 400, validation error | ⬜ |
-| Create job with duplicate name | 409, conflict | ⬜ |
-| Update job as owner | 200, job updated | ⬜ |
-| Update job as non-owner (non-admin) | 403, forbidden | ⬜ |
-| Delete job as admin | 200, job deleted | ⬜ |
-| Execute job → Check execution created | Execution in DB | ⬜ |
-| Bulk upload valid CSV | Jobs created/updated | ⬜ |
-| Bulk upload invalid CSV | Partial success with errors | ⬜ |
+| Create job with valid data | 201, job created | ✅ |
+| Create job with invalid cron | 400, validation error | ✅ |
+| Create job with duplicate name | 400, duplicate name error | ✅ |
+| Update job as owner | 200, job updated | ✅ |
+| Update job as non-owner (non-admin) | 403, forbidden | ✅ |
+| Delete job as admin | 200, job deleted | ✅ |
+| Execute job → Check execution created | `JobExecution` row created/updated | ✅ |
+| Bulk upload valid CSV | 200, `created_count` > 0 | ✅ |
+| Bulk upload invalid CSV rows | 200, partial success with row errors | ✅ |
+| Bulk upload invalid CSV structure | 400, invalid CSV | ✅ |
+| Cron validate | 200 with `valid=true/false` | ✅ |
+| Cron preview | 200 next runs; invalid cron returns 400 | ✅ |
+| Test-run | 200 with `{ok,type,status_code}` (GitHub missing token yields `ok=false`) | ✅ |
 
 ### Phase 8: Scheduler Tests
 
