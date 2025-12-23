@@ -891,7 +891,7 @@ venv/bin/python -m pytest -q tests_fastapi
 
 ## Phase 8: Scheduler Migration & Cutover (Days 25-30)
 
-### Status: 🟨 In Progress (8A ✅)
+### Status: 🟨 In Progress (8A ✅, 8B ✅)
 
 ### Objective
 Migrate APScheduler runtime + scheduler side-effects to FastAPI and complete the cutover from Flask.
@@ -912,7 +912,7 @@ Phase 8 is split to keep scheduler changes safe and reviewable. **No Phase 8 imp
 | Sub-Phase | Scope | Key Deliverables | Planned Tests |
 |----------|-------|------------------|--------------|
 | **8A ✅** | Scheduler core refactor (framework-agnostic) | `src/scheduler` no longer depends on Flask app context for DB work; uses `src/database/session.py` | `tests_fastapi/scheduler/test_scheduler_core.py` |
-| **8B** | Single-runner guarantees | Lock/leader election equivalent to Flask `scheduler.lock`; safe for multi-worker | `tests_fastapi/scheduler/test_scheduler_lock.py` |
+| **8B ✅** | Single-runner guarantees | Shared atomic lock file utility with stale lock handling | `tests_fastapi/scheduler/test_scheduler_lock.py` |
 | **8C** | FastAPI lifecycle integration | Start/stop APScheduler in FastAPI lifespan; expose status via health | `tests_fastapi/scheduler/test_scheduler_lifecycle.py` |
 | **8D** | Job write side-effects wiring | Create/update/delete/enable/disable schedule updates (best-effort when scheduler not running in-process) | `tests_fastapi/scheduler/test_scheduler_side_effects.py` |
 | **8E** | Scheduler regression tests | Timezone correctness (JST), end_date behavior, duplicate prevention | `tests_fastapi/scheduler/test_scheduler_regression.py` |
@@ -938,6 +938,10 @@ Implemented:
   - Implement lock mechanism similar to Flask `src/instance/scheduler.lock` (file lock or DB lock).
   - Ensure lock is acquired on startup and released on shutdown; tolerate stale locks.
   - Ensure only the leader process performs scheduling; non-leaders do not schedule but still serve API.
+
+Implemented:
+- Shared lock utility: `src/scheduler/lock.py`
+- Tests: `tests_fastapi/scheduler/test_scheduler_lock.py`
 
 #### 8C — FastAPI lifecycle integration
 - Goal: run APScheduler under FastAPI lifespan when enabled.
