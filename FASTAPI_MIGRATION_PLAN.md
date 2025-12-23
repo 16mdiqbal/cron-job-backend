@@ -879,7 +879,7 @@ This phase is intentionally split by **logical API grouping** to keep each unit 
 Verified:
 ```bash
 venv/bin/python -m pytest -q tests_fastapi
-# 215 passed
+# 220 passed
 ```
 
 ### Notes
@@ -891,7 +891,7 @@ venv/bin/python -m pytest -q tests_fastapi
 
 ## Phase 8: Scheduler Migration & Cutover (Days 25-30)
 
-### Status: 🟨 In Progress (8A ✅, 8B ✅, 8C ✅, 8D ✅)
+### Status: 🟨 In Progress (8A ✅, 8B ✅, 8C ✅, 8D ✅, 8E ✅)
 
 ### Objective
 Migrate APScheduler runtime + scheduler side-effects to FastAPI and complete the cutover from Flask.
@@ -915,7 +915,7 @@ Phase 8 is split to keep scheduler changes safe and reviewable. **No Phase 8 imp
 | **8B ✅** | Single-runner guarantees | Shared atomic lock file utility with stale lock handling | `tests_fastapi/scheduler/test_scheduler_lock.py` |
 | **8C ✅** | FastAPI lifecycle integration | Start/stop APScheduler in FastAPI lifespan; expose status via health | `tests_fastapi/scheduler/test_scheduler_lifecycle.py` |
 | **8D ✅** | Job write side-effects wiring | Create/update/delete/enable/disable schedule updates (best-effort when scheduler not running in-process) | `tests_fastapi/scheduler/test_scheduler_side_effects.py` |
-| **8E** | Scheduler regression tests | Timezone correctness (JST), end_date behavior, duplicate prevention | `tests_fastapi/scheduler/test_scheduler_regression.py` |
+| **8E ✅** | Scheduler regression tests | Timezone correctness (JST), end_date behavior, duplicate prevention | `tests_fastapi/scheduler/test_scheduler_regression.py` |
 | **8F** | Cutover plan + deprecation | Frontend base URL/proxy cutover, monitoring, rollback steps | Docs + runbooks |
 
 ### Detailed Plan (Per Sub-Phase)
@@ -975,6 +975,9 @@ Implemented:
   - Side-effects only when scheduler enabled + leader
   - Timezone correctness (JST cron)
   - No duplicate schedules
+
+Implemented:
+- Regression coverage: `tests_fastapi/scheduler/test_scheduler_regression.py`
 
 #### 8F — Cutover plan + deprecation
 - Cutover steps:
