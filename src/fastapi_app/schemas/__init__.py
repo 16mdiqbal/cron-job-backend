@@ -116,6 +116,10 @@ from .settings import (
     HealthResponse,
 )
 
+from .scheduler import (
+    SchedulerStatusResponse,
+    SchedulerResyncResponse,
+)
 
 __all__ = [
     # Common
@@ -197,4 +201,7 @@ __all__ = [
     "UiPreferencesResponse",
     "AppSettingsResponse",
     "HealthResponse",
+    # Scheduler
+    "SchedulerStatusResponse",
+    "SchedulerResyncResponse",
 ]

@@ -891,7 +891,7 @@ venv/bin/python -m pytest -q tests_fastapi
 
 ## Phase 8: Scheduler Migration & Cutover (Days 25-30)
 
-### Status: 🟨 In Progress (8A ✅, 8B ✅, 8C ✅, 8D ✅, 8E ✅, 8F ✅ — cutover execution pending)
+### Status: 🟨 In Progress (8A ✅, 8B ✅, 8C ✅, 8D ✅, 8E ✅, 8G ✅, 8F ✅ — cutover execution pending)
 
 ### Objective
 Migrate APScheduler runtime + scheduler side-effects to FastAPI and complete the cutover from Flask.
@@ -904,6 +904,7 @@ This phase explicitly includes the **scheduler side-effects deferred from Phase 
 - **Enable/disable behavior**: adding/removing jobs from the scheduler when `is_active` changes
 - **Scheduler startup/shutdown** under FastAPI lifespan
 - **Single-runner guarantees** (lock file / leader election)
+- **DB → scheduler bootstrap + reconciliation loop** (Flask parity) so scheduled executions work after restarts/cutover
 
 ### Sub-Phases (Execution Order)
 
@@ -916,6 +917,7 @@ Phase 8 is split to keep scheduler changes safe and reviewable. **No Phase 8 imp
 | **8C ✅** | FastAPI lifecycle integration | Start/stop APScheduler in FastAPI lifespan; expose status via health | `tests_fastapi/scheduler/test_scheduler_lifecycle.py` |
 | **8D ✅** | Job write side-effects wiring | Create/update/delete/enable/disable schedule updates (best-effort when scheduler not running in-process) | `tests_fastapi/scheduler/test_scheduler_side_effects.py` |
 | **8E ✅** | Scheduler regression tests | Timezone correctness (JST), end_date behavior, duplicate prevention | `tests_fastapi/scheduler/test_scheduler_regression.py` |
+| **8G ✅** | DB reconciliation / bootstrap | Startup DB → APScheduler resync + periodic reconciliation + operator endpoint | `tests_fastapi/scheduler/test_scheduler_resync.py` |
 | **8F ✅** | Cutover plan + deprecation | Frontend base URL/proxy cutover, monitoring, rollback steps | Docs + runbooks |
 
 ### Detailed Plan (Per Sub-Phase)
@@ -979,6 +981,22 @@ Implemented:
 Implemented:
 - Regression coverage: `tests_fastapi/scheduler/test_scheduler_regression.py`
 
+#### 8G — DB reconciliation / bootstrap (Flask parity)
+- Goal: ensure scheduled jobs produce execution rows even after restarts/cutover (no “touch job to schedule” requirement).
+- Tasks:
+  - On scheduler start (leader-only): resync all DB jobs into APScheduler.
+  - Periodically reconcile DB → APScheduler (`SCHEDULER_POLL_SECONDS`, clamped 10–300s).
+  - Auto-pause expired jobs during reconciliation (matches Flask’s periodic sync behavior).
+  - Provide admin/operator endpoint to trigger resync on-demand.
+
+Implemented:
+- Reconcile loop + resync logic: `src/fastapi_app/scheduler_reconcile.py`
+- Runtime hooks: `src/fastapi_app/scheduler_runtime.py`
+- Admin endpoints:
+  - `GET /api/v2/scheduler/status`
+  - `POST /api/v2/scheduler/resync`
+- Tests: `tests_fastapi/scheduler/test_scheduler_resync.py`
+
 #### 8F — Cutover plan + deprecation
 
 **Goal:** Make FastAPI (`/api/v2`) the default production API and migrate scheduler ownership from Flask → FastAPI safely, with a clear rollback path. This sub-phase is primarily **runbook/documentation** plus a deployment checklist.
@@ -1013,6 +1031,7 @@ Preferred sequence:
 1. **Deploy FastAPI** alongside Flask (no traffic change yet).
 2. Validate endpoints manually via Swagger:
    - `GET /api/v2/health` (confirm `scheduler_running` as expected for your topology)
+   - `POST /api/v2/scheduler/resync` (admin) then re-check `GET /api/v2/health` to confirm `scheduled_jobs_count` is sane
    - Smoke a few critical flows: login, list jobs, create job, update job, execute job.
 3. **Switch frontend** to FastAPI:
    - Update frontend `API_BASE` to `/api/v2` (or environment-specific base URL).

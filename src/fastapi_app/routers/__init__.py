@@ -19,6 +19,7 @@ from .taxonomy import router as taxonomy_router
 from .taxonomy_write import router as taxonomy_write_router
 from .notifications import router as notifications_router
 from .settings import router as settings_router
+from .scheduler import router as scheduler_router
 
 __all__ = [
     "auth_router",
@@ -28,4 +29,5 @@ __all__ = [
     "taxonomy_write_router",
     "notifications_router",
     "settings_router",
+    "scheduler_router",
 ]

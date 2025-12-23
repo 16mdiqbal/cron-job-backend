@@ -313,3 +313,33 @@ async def test_create_job_duplicate_name(async_client, user_access_token, seed_t
     assert resp.status_code == 400
     assert resp.json()["error"] == "Duplicate job name"
 
+
+@pytest.mark.asyncio
+async def test_create_job_broadcasts_notification(async_client, user_access_token, seed_team_and_category, setup_test_db):
+    resp = await async_client.post(
+        "/api/v2/jobs",
+        headers={"Authorization": f"Bearer {user_access_token}"},
+        json={
+            "name": "job-notify-created",
+            "cron_expression": "0 * * * *",
+            "end_date": _today_jst_str(),
+            "pic_team": seed_team_and_category["team_slug"],
+            "target_url": "https://example.com/hook",
+        },
+    )
+    assert resp.status_code == 201
+    job_id = resp.json()["job"]["id"]
+
+    inbox = await async_client.get(
+        "/api/v2/notifications",
+        params={"per_page": 20},
+        headers={"Authorization": f"Bearer {user_access_token}"},
+    )
+    assert inbox.status_code == 200
+    notifications = inbox.json()["notifications"]
+    assert any(
+        n["title"] == "New Job Created"
+        and n.get("related_job_id") == job_id
+        and setup_test_db["user"].email in n["message"]
+        for n in notifications
+    )

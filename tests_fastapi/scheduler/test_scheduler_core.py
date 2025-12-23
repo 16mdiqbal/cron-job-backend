@@ -39,6 +39,29 @@ def seed_job_for_webhook(app, setup_test_db):
 
 
 @pytest.fixture
+def seed_job_for_github(app, setup_test_db):
+    with app.app_context():
+        from src.models import db
+
+        user = setup_test_db["user"]
+        job = Job(
+            name="github-job",
+            cron_expression="0 0 * * *",
+            github_owner="Pay-Baymax",
+            github_repo="qa-automate-apiqa",
+            github_workflow_name="API_Launcher",
+            created_by=user.id,
+            is_active=True,
+            end_date=date(2099, 1, 1),
+            category="general",
+            pic_team=None,
+        )
+        db.session.add(job)
+        db.session.commit()
+        return job.id
+
+
+@pytest.fixture
 def seed_job_inactive(app, setup_test_db):
     with app.app_context():
         from src.models import db
@@ -138,3 +161,21 @@ def test_execute_job_webhook_success_creates_execution_and_broadcasts(seed_job_f
         assert _count(session, Notification) >= 4
         titles = {n.title for n in session.execute(select(Notification)).scalars().all()}
         assert "Job Completed" in titles
+
+
+def test_execute_job_github_missing_token_records_target(seed_job_for_github, app, monkeypatch):
+    monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+
+    with app.app_context():
+        job = Job.query.get(seed_job_for_github)
+        job_executor.execute_job(job.id, job.name, job.to_dict(), scheduler_timezone="UTC")
+
+    with get_db_session() as session:
+        execution = (
+            session.execute(select(JobExecution).where(JobExecution.job_id == seed_job_for_github))
+            .scalars()
+            .one()
+        )
+        assert execution.status == "failed"
+        assert execution.execution_type == "github_actions"
+        assert execution.target == "Pay-Baymax/qa-automate-apiqa/API_Launcher"

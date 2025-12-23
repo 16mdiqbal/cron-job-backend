@@ -176,9 +176,47 @@ async def test_bulk_upload_invalid_request_body_json(async_client, user_access_t
         headers={"Authorization": f"Bearer {user_access_token}"},
         files={"file": ("jobs.csv", _csv_bytes(csv_text), "text/csv")},
     )
-    assert resp.status_code == 200
+    assert resp.status_code == 400
     payload = resp.json()
     assert payload["created_count"] == 0
     assert payload["error_count"] == 1
     assert payload["errors"][0]["error"] == "Invalid JSON in Request Body"
 
+
+@pytest.mark.asyncio
+async def test_bulk_upload_target_url_owner_repo_workflow_is_treated_as_github_dispatch(
+    async_client, user_access_token, seed_bulk_upload_refs
+):
+    end_date = _today_jst().isoformat()
+    csv_text = (
+        "Job Name,Cron Schedule (JST),Target URL,Category,End Date,PIC Team\n"
+        f"gh-dispatch-short,0 * * * *,Pay-Baymax/qa-automate-apiqa/API_Launcher.yml,maintenance,{end_date},team-a\n"
+    )
+    resp = await async_client.post(
+        "/api/v2/jobs/bulk-upload",
+        headers={"Authorization": f"Bearer {user_access_token}"},
+        files={"file": ("jobs.csv", _csv_bytes(csv_text), "text/csv")},
+    )
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["created_count"] == 1
+    assert payload["error_count"] == 0
+
+    jobs_resp = await async_client.get(
+        "/api/v2/jobs",
+        headers={"Authorization": f"Bearer {user_access_token}"},
+    )
+    assert jobs_resp.status_code == 200
+    jobs = {job["name"]: job for job in jobs_resp.json()["jobs"]}
+    job_id = jobs["gh-dispatch-short"]["id"]
+
+    detail = await async_client.get(
+        f"/api/v2/jobs/{job_id}",
+        headers={"Authorization": f"Bearer {user_access_token}"},
+    )
+    assert detail.status_code == 200
+    job = detail.json()["job"]
+    assert job["target_url"] is None
+    assert job["github_owner"] == "Pay-Baymax"
+    assert job["github_repo"] == "qa-automate-apiqa"
+    assert job["github_workflow_name"] == "API_Launcher.yml"

@@ -1,5 +1,6 @@
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 from . import db
 
 
@@ -35,13 +36,25 @@ class JobExecution(db.Model):
     
     def to_dict(self):
         """Convert execution object to dictionary."""
+        def _iso_utc(dt: Optional[datetime]) -> Optional[str]:
+            if not dt:
+                return None
+            # SQLite doesn't preserve tzinfo; normalize to UTC-aware.
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            else:
+                dt = dt.astimezone(timezone.utc)
+            # Use RFC3339/ISO-8601 with 'Z' for consistent client parsing.
+            # Use milliseconds (JS Date parsing compatibility across browsers).
+            return dt.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+
         return {
             'id': self.id,
             'job_id': self.job_id,
             'status': self.status,
             'trigger_type': self.trigger_type,
-            'started_at': self.started_at.isoformat() if self.started_at else None,
-            'completed_at': self.completed_at.isoformat() if self.completed_at else None,
+            'started_at': _iso_utc(self.started_at),
+            'completed_at': _iso_utc(self.completed_at),
             'duration_seconds': self.duration_seconds,
             'execution_type': self.execution_type,
             'target': self.target,

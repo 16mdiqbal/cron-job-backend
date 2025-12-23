@@ -27,6 +27,10 @@ OPENAPI_TAGS = [
         "description": "Health check and status endpoints",
     },
     {
+        "name": "Scheduler",
+        "description": "Scheduler operational endpoints (admin only).",
+    },
+    {
         "name": "Authentication",
         "description": "User authentication and token management. Login, logout, token refresh.",
     },
@@ -155,10 +159,13 @@ Authorization: Bearer <your_jwt_token>
     )
     
     # Configure CORS
+    allow_origins = settings.cors_origins_list
+    # If allow_origins is wildcard, credentials must be disabled to avoid invalid CORS responses.
+    allow_credentials = False if allow_origins == ["*"] else True
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins_list,
-        allow_credentials=True,
+        allow_origins=allow_origins,
+        allow_credentials=allow_credentials,
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -272,6 +279,7 @@ def register_routers(app: FastAPI) -> None:
         taxonomy_write_router,
         notifications_router,
         settings_router,
+        scheduler_router,
     )
     app.include_router(auth_router, prefix="/api/v2")
     app.include_router(jobs_router, prefix="/api/v2")
@@ -280,6 +288,7 @@ def register_routers(app: FastAPI) -> None:
     app.include_router(taxonomy_write_router, prefix="/api/v2")
     app.include_router(notifications_router, prefix="/api/v2")
     app.include_router(settings_router, prefix="/api/v2")
+    app.include_router(scheduler_router, prefix="/api/v2")
 
 
 # Create the application instance

@@ -207,3 +207,52 @@ async def test_update_job_missing_target_configuration(async_client, user_access
     payload = resp.json()
     assert payload["error"] == "Missing target configuration"
 
+
+@pytest.mark.asyncio
+async def test_update_job_broadcasts_disabled_notification(async_client, user_access_token, seed_update_jobs, setup_test_db):
+    job_id = seed_update_jobs["job_user_id"]
+    resp = await async_client.put(
+        f"/api/v2/jobs/{job_id}",
+        headers={"Authorization": f"Bearer {user_access_token}"},
+        json={"is_active": False},
+    )
+    assert resp.status_code == 200
+
+    inbox = await async_client.get(
+        "/api/v2/notifications",
+        params={"per_page": 50},
+        headers={"Authorization": f"Bearer {user_access_token}"},
+    )
+    assert inbox.status_code == 200
+    notifications = inbox.json()["notifications"]
+    assert any(
+        n["title"] == "Job Disabled"
+        and n.get("related_job_id") == job_id
+        and setup_test_db["user"].email in n["message"]
+        for n in notifications
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_job_broadcasts_updated_notification(async_client, user_access_token, seed_update_jobs, setup_test_db):
+    job_id = seed_update_jobs["job_user_id"]
+    resp = await async_client.put(
+        f"/api/v2/jobs/{job_id}",
+        headers={"Authorization": f"Bearer {user_access_token}"},
+        json={"name": "user-job-updated-again"},
+    )
+    assert resp.status_code == 200
+
+    inbox = await async_client.get(
+        "/api/v2/notifications",
+        params={"per_page": 50},
+        headers={"Authorization": f"Bearer {user_access_token}"},
+    )
+    assert inbox.status_code == 200
+    notifications = inbox.json()["notifications"]
+    assert any(
+        n["title"] == "Job Updated"
+        and n.get("related_job_id") == job_id
+        and setup_test_db["user"].email in n["message"]
+        for n in notifications
+    )

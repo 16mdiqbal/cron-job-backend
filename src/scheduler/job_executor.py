@@ -236,6 +236,18 @@ def execute_job(
                     execution.mark_completed("failed", error_message=error_msg)
                     session.commit()
 
+                    try:
+                        _broadcast_job_failure(
+                            session,
+                            job_name=job_name,
+                            job_id=job_id,
+                            execution_id=execution.id,
+                            error_message=error_msg,
+                        )
+                        logger.info("Broadcast notification sent: Job '%s' failed (invalid config)", job_name)
+                    except Exception as exc:
+                        logger.error("Failed to broadcast failure notification: %s", exc)
+
                     if cfg.get("enable_email_notifications") and email_callbacks and email_callbacks.send_failure:
                         notification_emails = cfg.get("notification_emails", [])
                         if notification_emails:
@@ -249,6 +261,18 @@ def execute_job(
                 logger.error(error_msg)
                 execution.mark_completed("failed", error_message=error_msg)
                 session.commit()
+
+                try:
+                    _broadcast_job_failure(
+                        session,
+                        job_name=job_name,
+                        job_id=job_id,
+                        execution_id=execution.id,
+                        error_message=error_msg,
+                    )
+                    logger.info("Broadcast notification sent: Job '%s' failed (exception)", job_name)
+                except Exception as inner:
+                    logger.error("Failed to broadcast failure notification: %s", inner)
 
                 if cfg.get("enable_email_notifications") and email_callbacks and email_callbacks.send_failure:
                     notification_emails = cfg.get("notification_emails", [])
@@ -270,24 +294,62 @@ def execute_github_actions(
     *,
     email_callbacks: Optional[EmailCallbacks] = None,
 ):
+    owner = (job_config.get("github_owner") or "").strip()
+    repo = (job_config.get("github_repo") or "").strip()
+    workflow_name = (job_config.get("github_workflow_name") or "").strip()
+    metadata = job_config.get("metadata", {})
+
+    # Record target early so operators can see what failed even when token/config is missing.
+    execution.execution_type = "github_actions"
+    if owner and repo and workflow_name:
+        execution.target = f"{owner}/{repo}/{workflow_name}"
+    session.commit()
+
+    if not (owner and repo and workflow_name):
+        error_msg = f"Missing GitHub configuration for job '{job_name}'"
+        logger.error(error_msg)
+        execution.mark_completed("failed", error_message=error_msg)
+        session.commit()
+
+        try:
+            _broadcast_job_failure(
+                session,
+                job_name=job_name,
+                job_id=job_id,
+                execution_id=execution.id,
+                error_message=error_msg,
+            )
+            logger.info("Broadcast notification sent: Job '%s' failed (missing config)", job_name)
+        except Exception as exc:
+            logger.error("Failed to broadcast failure notification: %s", exc)
+
+        return
+
     github_token = job_config.get("github_token") or os.getenv("GITHUB_TOKEN")
     if not github_token:
         error_msg = f"GitHub token not configured. Cannot trigger workflow for job '{job_name}'"
         logger.error(error_msg)
         execution.mark_completed("failed", error_message=error_msg)
         session.commit()
+
+        try:
+            _broadcast_job_failure(
+                session,
+                job_name=job_name,
+                job_id=job_id,
+                execution_id=execution.id,
+                error_message=error_msg,
+            )
+            logger.info("Broadcast notification sent: Job '%s' failed (no token)", job_name)
+        except Exception as exc:
+            logger.error("Failed to broadcast failure notification: %s", exc)
+
         return
 
-    owner = job_config["github_owner"]
-    repo = job_config["github_repo"]
-    workflow_name = job_config["github_workflow_name"]
-    metadata = job_config.get("metadata", {})
+    def _dispatch_url(workflow: str) -> str:
+        return f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/{workflow}/dispatches"
 
-    url = f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/{workflow_name}/dispatches"
-
-    execution.execution_type = "github_actions"
-    execution.target = f"{owner}/{repo}/{workflow_name}"
-    session.commit()
+    url = _dispatch_url(workflow_name)
 
     headers = {
         "Authorization": f"Bearer {github_token}",
@@ -304,6 +366,22 @@ def execute_github_actions(
 
     try:
         response = requests.post(url, json=payload, headers=headers, timeout=10)
+
+        # Best-effort compatibility: if the workflow identifier was provided without an extension,
+        # try common workflow file extensions when GitHub returns 404.
+        if (
+            response.status_code == 404
+            and workflow_name
+            and "." not in workflow_name
+            and not str(workflow_name).isdigit()
+        ):
+            for ext in (".yml", ".yaml"):
+                alt = f"{workflow_name}{ext}"
+                alt_resp = requests.post(_dispatch_url(alt), json=payload, headers=headers, timeout=10)
+                if alt_resp.status_code != 404:
+                    response = alt_resp
+                    workflow_name = alt
+                    break
 
         if response.status_code == 204:
             logger.info("Job '%s' - GitHub Actions workflow triggered successfully", job_name)

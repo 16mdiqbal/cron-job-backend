@@ -19,7 +19,7 @@ import json
 import logging
 import os
 import re
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Annotated, Optional, Any
 from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
@@ -219,7 +219,14 @@ async def list_jobs(
         for job in jobs:
             payload = job.to_dict()
             last_execution_at = last_exec_by_job_id.get(job.id)
-            payload["last_execution_at"] = last_execution_at.isoformat() if last_execution_at else None
+            if last_execution_at is not None:
+                if getattr(last_execution_at, "tzinfo", None) is None:
+                    last_execution_at = last_execution_at.replace(tzinfo=timezone.utc)
+                else:
+                    last_execution_at = last_execution_at.astimezone(timezone.utc)
+                payload["last_execution_at"] = last_execution_at.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+            else:
+                payload["last_execution_at"] = None
             payload["next_execution_at"] = _compute_next_execution_at(job)
             jobs_payload.append(JobReadPayload.model_validate(payload))
 
@@ -294,6 +301,33 @@ async def bulk_upload_jobs(
             github_workflow_name = _first_non_empty(
                 row, ["workflow name", "github workflow name", "github_workflow_name"]
             )
+            dispatch_url = _first_non_empty(row, ["dispatch url", "dispatch_url", "github dispatch url", "github_dispatch_url"])
+
+            # Support shorthand GitHub dispatch config for CSVs:
+            # - dispatch_url column: owner/repo/workflow or /owner/repo/actions/workflows/workflow
+            # - (legacy) target_url column set to owner/repo/workflow should be treated as GitHub dispatch config, not webhook.
+            if dispatch_url:
+                try:
+                    owner, repo, workflow = _parse_dispatch_url(dispatch_url)
+                    github_owner, github_repo, github_workflow_name = owner, repo, workflow
+                    target_url = None
+                except ValueError as exc:
+                    errors.append(
+                        {
+                            "row": row_index,
+                            "job_name": name,
+                            "error": "Invalid dispatch_url",
+                            "message": str(exc) or "Invalid dispatch_url.",
+                        }
+                    )
+                    continue
+            elif target_url and _looks_like_owner_repo_workflow(target_url):
+                try:
+                    owner, repo, workflow = _parse_dispatch_url(target_url)
+                    github_owner, github_repo, github_workflow_name = owner, repo, workflow
+                    target_url = None
+                except ValueError:
+                    pass
             category_raw = _first_non_empty(row, ["category", "job category", "job_category"])
             category = await _resolve_category_slug(db, category_raw)
             category_error = await _validate_category_slug(db, category)
@@ -332,7 +366,16 @@ async def bulk_upload_jobs(
             pic_team = await _resolve_pic_team_slug(db, pic_team_raw)
             pic_team_error = await _validate_pic_team_slug(db, pic_team)
             if pic_team_error:
-                errors.append({"row": row_index, "job_name": name, "error": "Invalid PIC team", "message": pic_team_error})
+                errors.append(
+                    {
+                        "row": row_index,
+                        "job_name": name,
+                        "error": "Invalid PIC team",
+                        "message": pic_team_error,
+                        "pic_team": (pic_team_raw or "").strip() or None,
+                        "pic_team_slug": pic_team,
+                    }
+                )
                 continue
 
             branch = _first_non_empty(row, ["branch", "ref"])
@@ -466,16 +509,18 @@ async def bulk_upload_jobs(
             created_jobs.append({"id": new_job.id, "name": new_job.name, "is_active": new_job.is_active})
 
         if is_dry_run:
+            total_failed = len(created_jobs) == 0 and len(errors) > 0
             return JSONResponse(
-                status_code=200,
+                status_code=400 if total_failed else 200,
                 content={
-                    "message": "CSV validated successfully",
+                    "message": "CSV validation failed" if total_failed else "CSV validated successfully",
                     "dry_run": True,
                     "stats": stats,
                     "created_count": len(created_jobs),
                     "error_count": len(errors),
                     "errors": errors,
                     "jobs": created_jobs,
+                    **({"error": "CSV validation failed"} if total_failed else {}),
                 },
             )
 
@@ -483,16 +528,22 @@ async def bulk_upload_jobs(
         for job in created_job_models:
             sync_job_schedule(job)
 
+        total_failed = len(created_jobs) == 0 and len(errors) > 0
         return JSONResponse(
-            status_code=200,
+            status_code=400 if total_failed else 200,
             content={
-                "message": "Bulk upload processed",
+                "message": (
+                    "No jobs were created. Fix CSV errors and try again."
+                    if total_failed
+                    else "Bulk upload processed"
+                ),
                 "dry_run": False,
                 "stats": stats,
                 "created_count": len(created_jobs),
                 "error_count": len(errors),
                 "errors": errors,
                 "jobs": created_jobs,
+                **({"error": "Bulk upload failed"} if total_failed else {}),
             },
         )
     except ValueError as exc:
@@ -792,6 +843,26 @@ async def create_job(
         github_repo = str(data.get("github_repo", "")).strip() or None
         github_workflow_name = str(data.get("github_workflow_name", "")).strip() or None
 
+        # Convenience: allow GitHub dispatch shorthand to be provided in target_url.
+        # Example: Pay-Baymax/qa-automate-apiqa/API_Launcher.yml
+        if target_url and _looks_like_owner_repo_workflow(target_url):
+            try:
+                owner, repo, workflow = _parse_dispatch_url(target_url)
+                github_owner, github_repo, github_workflow_name = owner, repo, workflow
+                target_url = None
+            except ValueError:
+                pass
+
+        # Webhook target_url must be a full URL.
+        if target_url and "://" not in target_url:
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "error": "Invalid target_url",
+                    "message": 'target_url must include scheme (http:// or https://). For GitHub dispatch, use github_owner/github_repo/github_workflow_name or provide owner/repo/workflow.',
+                },
+            )
+
         category = await _resolve_category_slug(db, data.get("category"))
         category_error = await _validate_category_slug(db, category)
         if category_error:
@@ -893,6 +964,15 @@ async def create_job(
         await db.refresh(new_job)
         sync_job_schedule(new_job)
 
+        # Flask parity: broadcast job created notification to all users.
+        try:
+            from ..utils.notifications import broadcast_job_created
+
+            created_by = current_user.email or current_user.username or "Unknown"
+            await broadcast_job_created(db, job_name=new_job.name, job_id=new_job.id, created_by_name=created_by)
+        except Exception:
+            pass
+
         return JSONResponse(status_code=201, content={"message": "Job created successfully", "job": new_job.to_dict()})
     except Exception as exc:
         logger.exception("Error creating job")
@@ -933,6 +1013,8 @@ async def update_job(
                 content={"error": "Insufficient permissions", "message": "You can only update your own jobs"},
             )
 
+        was_active = bool(job.is_active)
+
         content_type = (request.headers.get("content-type") or "").lower()
         if "application/json" not in content_type:
             return JSONResponse(status_code=400, content={"error": "Content-Type must be application/json"})
@@ -965,7 +1047,27 @@ async def update_job(
             job.cron_expression = new_cron
 
         if "target_url" in data:
-            job.target_url = str(data.get("target_url", "")).strip() or None
+            new_target_url = str(data.get("target_url", "")).strip() or None
+
+            if new_target_url and _looks_like_owner_repo_workflow(new_target_url):
+                try:
+                    owner, repo, workflow = _parse_dispatch_url(new_target_url)
+                    job.target_url = None
+                    job.github_owner = owner
+                    job.github_repo = repo
+                    job.github_workflow_name = workflow
+                except ValueError as exc:
+                    return JSONResponse(status_code=400, content={"error": "Invalid target_url", "message": str(exc)})
+            else:
+                if new_target_url and "://" not in new_target_url:
+                    return JSONResponse(
+                        status_code=400,
+                        content={
+                            "error": "Invalid target_url",
+                            "message": 'target_url must include scheme (http:// or https://).',
+                        },
+                    )
+                job.target_url = new_target_url
 
         if "github_owner" in data:
             job.github_owner = str(data.get("github_owner", "")).strip() or None
@@ -1072,6 +1174,22 @@ async def update_job(
         await db.refresh(job)
         sync_job_schedule(job)
 
+        # Flask parity: broadcast job update notifications (enabled/disabled vs generic update).
+        try:
+            from ..utils.notifications import broadcast_job_disabled, broadcast_job_enabled, broadcast_job_updated
+
+            actor = current_user.email or current_user.username or "Unknown"
+            is_active_changed = ("is_active" in data) and (bool(job.is_active) != was_active)
+            if is_active_changed:
+                if bool(job.is_active):
+                    await broadcast_job_enabled(db, job_name=job.name, job_id=job.id, enabled_by_name=actor)
+                else:
+                    await broadcast_job_disabled(db, job_name=job.name, job_id=job.id, disabled_by_name=actor)
+            else:
+                await broadcast_job_updated(db, job_name=job.name, job_id=job.id, updated_by_name=actor)
+        except Exception:
+            pass
+
         return JSONResponse(status_code=200, content={"message": "Job updated successfully", "job": job.to_dict()})
     except Exception as exc:
         await db.rollback()
@@ -1113,10 +1231,19 @@ async def delete_job(
             )
 
         deleted_job = {"id": job.id, "name": job.name}
+        actor = current_user.email or current_user.username or "Unknown"
 
         unschedule_job(job.id)
         await db.delete(job)
         await db.commit()
+
+        # Flask parity: broadcast job deleted notification to all users.
+        try:
+            from ..utils.notifications import broadcast_job_deleted
+
+            await broadcast_job_deleted(db, job_name=deleted_job["name"], deleted_by_name=actor)
+        except Exception:
+            pass
 
         return JSONResponse(status_code=200, content={"message": "Job deleted successfully", "deleted_job": deleted_job})
     except Exception as exc:
@@ -1139,13 +1266,57 @@ def _truncate_output(value: str, limit: int = 1000) -> str:
 
 
 def _parse_dispatch_url(value: str) -> tuple[str, str, str]:
-    candidate = value if "://" in value else f"https://{value}"
+    raw = (value or "").strip()
+    if not raw:
+        raise ValueError("dispatch_url is required.")
+
+    # Support multiple formats:
+    # - GitHub UI URL: https://github.com/<owner>/<repo>/actions/workflows/<workflow>.yml
+    # - GitHub API URL: https://api.github.com/repos/<owner>/<repo>/actions/workflows/<workflow>.yml/dispatches
+    # - Path-only: /<owner>/<repo>/actions/workflows/<workflow>.yml
+    # - Shorthand: <owner>/<repo>/<workflow>.yml
+    candidate = raw if "://" in raw else f"https://{raw.lstrip('/')}"
     parsed = urlparse(candidate)
     path = (parsed.path or "").strip("/")
     parts = [p for p in path.split("/") if p]
+
+    # API form includes "repos" prefix.
+    if len(parts) >= 6 and parts[0] == "repos" and parts[3] == "actions" and parts[4] == "workflows":
+        return parts[1], parts[2], parts[5]
+
+    # UI/path form.
     if len(parts) >= 5 and parts[2] == "actions" and parts[3] == "workflows":
         return parts[0], parts[1], parts[4]
-    raise ValueError("Invalid dispatch URL format. Expected /<owner>/<repo>/actions/workflows/<workflow>.")
+
+    # Shorthand: <owner>/<repo>/<workflow>
+    if len(parts) == 3 and parsed.netloc and parsed.netloc.lower() == parts[0].lower():
+        # This is likely a URL like https://example.com/a/b; reject.
+        pass
+
+    # If input had no scheme, urlparse treats first segment as netloc.
+    if "://" not in raw:
+        raw_parts = [p for p in raw.strip("/").split("/") if p]
+        if len(raw_parts) == 3:
+            return raw_parts[0], raw_parts[1], raw_parts[2]
+
+    raise ValueError(
+        "Invalid dispatch URL format. Expected one of: "
+        "<owner>/<repo>/<workflow>, "
+        "/<owner>/<repo>/actions/workflows/<workflow>, "
+        "or https://github.com/<owner>/<repo>/actions/workflows/<workflow>."
+    )
+
+
+def _looks_like_owner_repo_workflow(value: str) -> bool:
+    raw = (value or "").strip()
+    if not raw or "://" in raw:
+        return False
+    parts = [p for p in raw.strip("/").split("/") if p]
+    if len(parts) != 3:
+        return False
+    # Heuristic: domains typically contain dots; GitHub org/user names don't.
+    owner = parts[0]
+    return "." not in owner
 
 
 async def _http_request(
@@ -1348,6 +1519,8 @@ async def execute_job_now(
         await db.refresh(execution)
 
         try:
+            from ..utils.notifications import broadcast_job_failure, broadcast_job_success
+
             if base_config.get("github_owner") and base_config.get("github_repo") and base_config.get("github_workflow_name"):
                 owner = base_config["github_owner"]
                 repo = base_config["github_repo"]
@@ -1363,9 +1536,22 @@ async def execute_job_now(
                     error_msg = f"GitHub token not configured. Cannot trigger workflow for job '{job.name}'"
                     execution.mark_completed("failed", error_message=error_msg)
                     await db.commit()
+                    try:
+                        await broadcast_job_failure(
+                            db,
+                            job_name=job.name,
+                            job_id=job.id,
+                            execution_id=execution.id,
+                            error_message=error_msg,
+                        )
+                    except Exception:
+                        pass
                     return JSONResponse(status_code=200, content={"message": "Job triggered successfully", "job_id": job.id})
 
-                url = f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/{workflow_name}/dispatches"
+                def _dispatch_url(workflow: str) -> str:
+                    return f"https://api.github.com/repos/{owner}/{repo}/actions/workflows/{workflow}/dispatches"
+
+                url = _dispatch_url(workflow_name)
                 headers = {
                     "Authorization": f"Bearer {token}",
                     "Accept": "application/vnd.github+json",
@@ -1375,12 +1561,44 @@ async def execute_job_now(
                 payload = {"ref": ref, "inputs": metadata}
 
                 status_code, text = await _http_request("POST", url, headers=headers, json_payload=payload)
+                if (
+                    status_code == 404
+                    and workflow_name
+                    and "." not in workflow_name
+                    and not str(workflow_name).isdigit()
+                ):
+                    for ext in (".yml", ".yaml"):
+                        alt = f"{workflow_name}{ext}"
+                        status_code, text = await _http_request(
+                            "POST",
+                            _dispatch_url(alt),
+                            headers=headers,
+                            json_payload=payload,
+                        )
+                        if status_code != 404:
+                            workflow_name = alt
+                            execution.target = f"{owner}/{repo}/{workflow_name}"
+                            await db.commit()
+                            break
                 if status_code == 204:
                     execution.mark_completed("success", response_status=204, output=f"Workflow triggered successfully on branch {ref}")
                 else:
                     error_msg = f"GitHub Actions dispatch failed. Status: {status_code}, Response: {_truncate_output(text)}"
                     execution.mark_completed("failed", response_status=status_code, error_message=error_msg, output=_truncate_output(text))
                 await db.commit()
+                try:
+                    if execution.status == "success":
+                        await broadcast_job_success(db, job_name=job.name, job_id=job.id, execution_id=execution.id)
+                    else:
+                        await broadcast_job_failure(
+                            db,
+                            job_name=job.name,
+                            job_id=job.id,
+                            execution_id=execution.id,
+                            error_message=execution.error_message or "Job failed",
+                        )
+                except Exception:
+                    pass
             else:
                 target_url = base_config.get("target_url")
                 execution.execution_type = "webhook"
@@ -1404,9 +1622,34 @@ async def execute_job_now(
                         output=output,
                     )
                 await db.commit()
+                try:
+                    if execution.status == "success":
+                        await broadcast_job_success(db, job_name=job.name, job_id=job.id, execution_id=execution.id)
+                    else:
+                        await broadcast_job_failure(
+                            db,
+                            job_name=job.name,
+                            job_id=job.id,
+                            execution_id=execution.id,
+                            error_message=execution.error_message or "Job failed",
+                        )
+                except Exception:
+                    pass
         except Exception as exc:
             execution.mark_completed("failed", error_message=f"Request failed: {exc}")
             await db.commit()
+            try:
+                from ..utils.notifications import broadcast_job_failure
+
+                await broadcast_job_failure(
+                    db,
+                    job_name=job.name,
+                    job_id=job.id,
+                    execution_id=execution.id,
+                    error_message=str(exc),
+                )
+            except Exception:
+                pass
 
         return JSONResponse(status_code=200, content={"message": "Job triggered successfully", "job_id": job.id})
     except Exception as exc:

@@ -105,3 +105,23 @@ async def test_delete_job_not_found(async_client, admin_access_token):
     payload = resp.json()
     assert payload["error"] == "Job not found"
 
+
+@pytest.mark.asyncio
+async def test_delete_job_broadcasts_notification(async_client, user_access_token, seed_delete_jobs, setup_test_db):
+    job_id = seed_delete_jobs["user_job_id"]
+    resp = await async_client.delete(
+        f"/api/v2/jobs/{job_id}",
+        headers={"Authorization": f"Bearer {user_access_token}"},
+    )
+    assert resp.status_code == 200
+
+    inbox = await async_client.get(
+        "/api/v2/notifications",
+        params={"per_page": 50},
+        headers={"Authorization": f"Bearer {user_access_token}"},
+    )
+    assert inbox.status_code == 200
+    notifications = inbox.json()["notifications"]
+    assert any(
+        n["title"] == "Job Deleted" and setup_test_db["user"].email in n["message"] for n in notifications
+    )

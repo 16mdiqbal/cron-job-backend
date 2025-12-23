@@ -60,6 +60,7 @@ Thumbs.db
 seed_jobs.py
 vite.log
 logs/
+fastapi.log
 
 # Local dev artifacts
 *.pid

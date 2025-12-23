@@ -3,7 +3,8 @@ FastAPI Scheduler Runtime (Phase 8C).
 
 Starts/stops APScheduler under FastAPI lifespan, guarded by a single-runner lock.
 
-Phase 8C deliberately does not wire job CRUD side-effects; that is handled in Phase 8D.
+Phase 8C deliberately keeps APScheduler configuration minimal. CRUD side-effects are wired
+in Phase 8D; DB -> scheduler bootstrap/reconciliation is added for Flask parity (Phase 8G).
 """
 
 from __future__ import annotations
@@ -94,12 +95,29 @@ def start_scheduler() -> bool:
         scheduler.configure(timezone=ZoneInfo("UTC"))
 
     scheduler.start()
+
+    # Flask parity: bootstrap schedules from DB and keep them reconciled.
+    try:
+        from .scheduler_reconcile import resync_from_db, start_reconciler
+
+        resync_from_db()
+        start_reconciler()
+    except Exception:
+        # Never fail startup; health endpoint will reflect scheduled_jobs_count.
+        pass
     return True
 
 
 def stop_scheduler() -> None:
     """Stop scheduler if running and release leadership lock if held."""
     global _lock, _is_leader
+
+    try:
+        from .scheduler_reconcile import stop_reconciler
+
+        stop_reconciler()
+    except Exception:
+        pass
 
     scheduler = _get_scheduler()
     try:
@@ -124,4 +142,3 @@ def _reset_for_tests() -> None:
     global _lock, _is_leader
     _lock = None
     _is_leader = False
-
