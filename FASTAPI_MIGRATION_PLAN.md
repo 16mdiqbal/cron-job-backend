@@ -1061,11 +1061,13 @@ Implemented (documentation/runbook):
 ### Frontend Changes Required
 
 ```typescript
-// cron-job-frontend/src/constants/api.ts
-// Change from:
-export const API_BASE = '/api';
-// To:
-export const API_BASE = '/api/v2';
+// cron-job-frontend: set v2 base URL
+// Files:
+// - cron-job-frontend/src/services/api/client.ts
+// - cron-job-frontend/src/config/env.ts
+//
+// Example (dev):
+// VITE_API_URL=http://localhost:5001/api/v2
 ```
 
 ### Scheduler Refactoring
@@ -1086,7 +1088,7 @@ async def execute_job_async(job_id):
 - [x] Scheduler running under FastAPI lifespan (single runner)
 - [x] Scheduler side-effects wired into FastAPI job write endpoints (create/update/delete/enable/disable)
 - [x] Cutover/rollback/deprecation runbook documented (Phase 8F)
-- [ ] Frontend fully migrated to `/api/v2`
+- [x] Frontend fully migrated to `/api/v2` (cron-job-frontend `VITE_API_URL`)
 - [ ] Proxy cutover completed with rollback option
 - [ ] Flask code removed after stability window
 - [ ] All tests passing (Flask + FastAPI suites)
@@ -2411,8 +2413,11 @@ cp src/instance/cron_jobs.db src/instance/cron_jobs.db.backup_phase_N
 **Rollback Steps:**
 ```bash
 # 1. Revert frontend API base URL
-# In cron-job-frontend/src/constants/api.ts
-# Change back: export const API_BASE = '/api';
+# In cron-job-frontend, set VITE_API_URL back to Flask, e.g.:
+#   VITE_API_URL=http://localhost:5001/api
+# Files:
+# - cron-job-frontend/.env.development
+# - cron-job-frontend/.env.production
 
 # 2. Rebuild and redeploy frontend
 cd cron-job-frontend

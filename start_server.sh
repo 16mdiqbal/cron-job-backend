@@ -4,6 +4,9 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Cutover safety: prevent Flask scheduler from running when FastAPI owns scheduling.
+export SCHEDULER_ENABLED=${SCHEDULER_ENABLED:-false}
+
 # Stop any existing server (optional)
 if [[ "${STOP_EXISTING:-true}" == "true" ]]; then
   echo "Stopping any existing Flask server..."

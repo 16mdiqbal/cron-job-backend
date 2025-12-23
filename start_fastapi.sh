@@ -1,7 +1,8 @@
 #!/bin/bash
 
 # FastAPI Server Startup Script
-# Runs alongside Flask on port 8001
+# Cutover default: run FastAPI on port 5001 (Flask replacement).
+# To run alongside Flask, set FASTAPI_PORT=8001 (or any free port).
 
 set -e
 
@@ -26,8 +27,14 @@ elif [ -d "$SCRIPT_DIR/../venv" ]; then
 fi
 
 # Set default port
-PORT=${FASTAPI_PORT:-8001}
+PORT=${FASTAPI_PORT:-5001}
 HOST=${FASTAPI_HOST:-0.0.0.0}
+
+# Scheduler ownership (Phase 8 cutover): enable scheduler by default for FastAPI.
+export SCHEDULER_ENABLED=${SCHEDULER_ENABLED:-true}
+export TESTING=${TESTING:-false}
+mkdir -p "$SCRIPT_DIR/src/instance"
+export SCHEDULER_LOCK_PATH=${SCHEDULER_LOCK_PATH:-"$SCRIPT_DIR/src/instance/scheduler.lock"}
 
 # Check if port is already in use
 if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
