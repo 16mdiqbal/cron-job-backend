@@ -41,6 +41,7 @@ from ..schemas.user import (
 from ...database.session import get_db
 from ...models.user import User
 from ...models.notification_preferences import UserNotificationPreferences
+from ...models.ui_preferences import UserUiPreferences
 
 logger = logging.getLogger(__name__)
 
@@ -518,6 +519,107 @@ async def update_notification_preferences(
         status_code=200,
         content={"message": "Notification preferences updated successfully", "preferences": prefs.to_dict()},
     )
+
+
+def _default_jobs_table_columns() -> dict[str, bool]:
+    return {
+        "pic_team": True,
+        "end_date": True,
+        "cron_expression": False,
+        "target_url": False,
+        "last_execution_at": False,
+    }
+
+
+@router.get(
+    "/users/{user_id}/ui-preferences",
+    summary="Get UI preferences",
+    description="Admins can access any; non-admins can only access own. Get-or-create behavior matches Flask.",
+    tags=["Users"],
+)
+async def get_ui_preferences(
+    user_id: str,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if current_user.id != user_id and current_user.role != "admin":
+        return JSONResponse(status_code=403, content={"error": "Forbidden: Cannot access other users preferences"})
+
+    user_result = await db.execute(select(User).where(User.id == user_id).limit(1))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        return JSONResponse(status_code=404, content={"error": "User not found"})
+
+    prefs_result = await db.execute(select(UserUiPreferences).where(UserUiPreferences.user_id == user_id).limit(1))
+    prefs = prefs_result.scalar_one_or_none()
+    if not prefs:
+        prefs = UserUiPreferences(user_id=user_id)
+        prefs.set_jobs_table_columns(_default_jobs_table_columns())
+        db.add(prefs)
+        await db.commit()
+        await db.refresh(prefs)
+
+    columns = prefs.get_jobs_table_columns() or _default_jobs_table_columns()
+    return JSONResponse(status_code=200, content={"preferences": {"jobs_table_columns": columns}})
+
+
+@router.put(
+    "/users/{user_id}/ui-preferences",
+    summary="Update UI preferences",
+    description="Admins can update any; non-admins can only update own. Requires jobs_table_columns object; normalized to allowed keys (Flask parity).",
+    tags=["Users"],
+)
+async def update_ui_preferences(
+    user_id: str,
+    request: Request,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if current_user.id != user_id and current_user.role != "admin":
+        return JSONResponse(status_code=403, content={"error": "Forbidden: Cannot update other users preferences"})
+
+    content_type = (request.headers.get("content-type") or "").lower()
+    if "application/json" not in content_type:
+        return JSONResponse(status_code=400, content={"error": "Content-Type must be application/json"})
+
+    user_result = await db.execute(select(User).where(User.id == user_id).limit(1))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        return JSONResponse(status_code=404, content={"error": "User not found"})
+
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+    if not isinstance(data, dict):
+        return JSONResponse(status_code=400, content={"error": "Invalid payload", "message": "JSON body must be an object."})
+
+    incoming_cols = data.get("jobs_table_columns")
+    if incoming_cols is None:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Missing required fields", "message": '"jobs_table_columns" is required.'},
+        )
+    if not isinstance(incoming_cols, dict):
+        return JSONResponse(status_code=400, content={"error": "Invalid payload", "message": '"jobs_table_columns" must be an object.'})
+
+    normalized = _default_jobs_table_columns()
+    allowed_keys = set(normalized.keys())
+    for key, value in incoming_cols.items():
+        if key in allowed_keys:
+            normalized[key] = bool(value)
+
+    prefs_result = await db.execute(select(UserUiPreferences).where(UserUiPreferences.user_id == user_id).limit(1))
+    prefs = prefs_result.scalar_one_or_none()
+    if not prefs:
+        prefs = UserUiPreferences(user_id=user_id)
+        db.add(prefs)
+
+    prefs.set_jobs_table_columns(normalized)
+    await db.commit()
+    await db.refresh(prefs)
+
+    return JSONResponse(status_code=200, content={"preferences": {"jobs_table_columns": normalized}})
 
 
 # ============================================================================

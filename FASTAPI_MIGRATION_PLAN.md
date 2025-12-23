@@ -625,8 +625,8 @@ Complete user management + preference endpoints that are not covered by Phase 3.
 | 8 | `DELETE /api/auth/users/<id>` | `DELETE /api/v2/auth/users/{id}` | Admin | ✅ |
 | 9 | `GET /api/auth/users/<id>/preferences` | `GET /api/v2/auth/users/{id}/preferences` | JWT | ✅ |
 | 10 | `PUT /api/auth/users/<id>/preferences` | `PUT /api/v2/auth/users/{id}/preferences` | JWT | ✅ |
-| 11 | `GET /api/auth/users/<id>/ui-preferences` | `GET /api/v2/auth/users/{id}/ui-preferences` | JWT | ⬜ |
-| 12 | `PUT /api/auth/users/<id>/ui-preferences` | `PUT /api/v2/auth/users/{id}/ui-preferences` | JWT | ⬜ |
+| 11 | `GET /api/auth/users/<id>/ui-preferences` | `GET /api/v2/auth/users/{id}/ui-preferences` | JWT | ✅ |
+| 12 | `PUT /api/auth/users/<id>/ui-preferences` | `PUT /api/v2/auth/users/{id}/ui-preferences` | JWT | ✅ |
 
 ### Sub-Phases (Execution Order)
 
@@ -636,7 +636,7 @@ Complete user management + preference endpoints that are not covered by Phase 3.
 | **6B** | User update (self + admin controls) | `PUT /api/v2/auth/users/{id}` | `tests_fastapi/users/test_users_update.py` ✅ |
 | **6C** | User delete (admin-only + self-delete guard) | `DELETE /api/v2/auth/users/{id}` | `tests_fastapi/users/test_users_delete.py` ✅ |
 | **6D** | Notification preferences (get-or-create + update) | `GET/PUT /api/v2/auth/users/{id}/preferences` | `tests_fastapi/users/test_notification_preferences.py` ✅ |
-| **6E** | UI preferences (get-or-create + update) | `GET/PUT /api/v2/auth/users/{id}/ui-preferences` | `tests_fastapi/users/test_ui_preferences.py` |
+| **6E** | UI preferences (get-or-create + update) | `GET/PUT /api/v2/auth/users/{id}/ui-preferences` | `tests_fastapi/users/test_ui_preferences.py` ✅ |
 
 ### Tasks
 
@@ -646,7 +646,7 @@ Complete user management + preference endpoints that are not covered by Phase 3.
 - [x] Implement Phase 6B: user update endpoint + tests
 - [x] Implement Phase 6C: user delete endpoint + tests
 - [x] Implement Phase 6D: notification preferences endpoints + tests
-- [ ] Implement Phase 6E: UI preferences endpoints + tests
+- [x] Implement Phase 6E: UI preferences endpoints + tests
 - [ ] Ensure response shapes match Flask where feasible (`error` + `message` keys, and payload nesting like `user`, `preferences`)
 
 ### Deliverables
