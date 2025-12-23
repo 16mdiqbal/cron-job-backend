@@ -40,6 +40,7 @@ from ..schemas.user import (
 )
 from ...database.session import get_db
 from ...models.user import User
+from ...models.notification_preferences import UserNotificationPreferences
 
 logger = logging.getLogger(__name__)
 
@@ -411,6 +412,112 @@ async def delete_user(
     await db.commit()
 
     return JSONResponse(status_code=200, content={"message": "User deleted successfully", "deleted_user": deleted_user})
+
+
+@router.get(
+    "/users/{user_id}/preferences",
+    summary="Get notification preferences",
+    description="Admins can access any; non-admins can only access own. Get-or-create behavior matches Flask.",
+    tags=["Users"],
+)
+async def get_notification_preferences(
+    user_id: str,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if current_user.id != user_id and current_user.role != "admin":
+        return JSONResponse(status_code=403, content={"error": "Forbidden: Cannot access other users preferences"})
+
+    user_result = await db.execute(select(User).where(User.id == user_id).limit(1))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        return JSONResponse(status_code=404, content={"error": "User not found"})
+
+    prefs_result = await db.execute(
+        select(UserNotificationPreferences).where(UserNotificationPreferences.user_id == user_id).limit(1)
+    )
+    prefs = prefs_result.scalar_one_or_none()
+
+    if not prefs:
+        # Match Flask defaults on first GET.
+        prefs = UserNotificationPreferences(
+            user_id=user_id,
+            email_on_job_success=True,
+            email_on_job_failure=True,
+            email_on_job_disabled=False,
+            browser_notifications=False,
+            daily_digest=False,
+            weekly_report=False,
+        )
+        db.add(prefs)
+        await db.commit()
+        await db.refresh(prefs)
+
+    return JSONResponse(
+        status_code=200,
+        content={"message": "Notification preferences retrieved successfully", "preferences": prefs.to_dict()},
+    )
+
+
+@router.put(
+    "/users/{user_id}/preferences",
+    summary="Update notification preferences",
+    description="Admins can update any; non-admins can only update own. Partial updates allowed; create-on-missing matches Flask.",
+    tags=["Users"],
+)
+async def update_notification_preferences(
+    user_id: str,
+    request: Request,
+    current_user: CurrentUser,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    if current_user.id != user_id and current_user.role != "admin":
+        return JSONResponse(status_code=403, content={"error": "Forbidden: Cannot update other users preferences"})
+
+    content_type = (request.headers.get("content-type") or "").lower()
+    if "application/json" not in content_type:
+        return JSONResponse(status_code=400, content={"error": "Content-Type must be application/json"})
+
+    user_result = await db.execute(select(User).where(User.id == user_id).limit(1))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        return JSONResponse(status_code=404, content={"error": "User not found"})
+
+    try:
+        data = await request.json()
+    except Exception:
+        return JSONResponse(status_code=400, content={"error": "Invalid JSON"})
+    if not isinstance(data, dict):
+        return JSONResponse(status_code=400, content={"error": "Invalid payload", "message": "JSON body must be an object."})
+
+    prefs_result = await db.execute(
+        select(UserNotificationPreferences).where(UserNotificationPreferences.user_id == user_id).limit(1)
+    )
+    prefs = prefs_result.scalar_one_or_none()
+    if not prefs:
+        prefs = UserNotificationPreferences(user_id=user_id)
+        db.add(prefs)
+
+    if "email_on_job_success" in data:
+        prefs.email_on_job_success = bool(data["email_on_job_success"])
+    if "email_on_job_failure" in data:
+        prefs.email_on_job_failure = bool(data["email_on_job_failure"])
+    if "email_on_job_disabled" in data:
+        prefs.email_on_job_disabled = bool(data["email_on_job_disabled"])
+    if "browser_notifications" in data:
+        prefs.browser_notifications = bool(data["browser_notifications"])
+    if "daily_digest" in data:
+        prefs.daily_digest = bool(data["daily_digest"])
+    if "weekly_report" in data:
+        prefs.weekly_report = bool(data["weekly_report"])
+
+    await db.commit()
+    await db.refresh(prefs)
+
+    return JSONResponse(
+        status_code=200,
+        content={"message": "Notification preferences updated successfully", "preferences": prefs.to_dict()},
+    )
 
 
 # ============================================================================
