@@ -723,21 +723,21 @@ venv/bin/python -m pytest -q tests_fastapi
 
 ## Phase 7: Notifications & Settings (Days 22-24)
 
-### Status: ⬜ Not Started
+### Status: 🟨 In Progress (7A ✅)
 
 ### Objective
-Complete remaining endpoints and utilities.
+Complete remaining endpoints (Notifications, Slack Settings, Category/Team write) and any required supporting utilities.
 
 ### Endpoints to Migrate
 
 | # | Flask Endpoint | FastAPI Endpoint | Status |
 |---|----------------|------------------|--------|
-| 1 | `GET /api/notifications` | `GET /api/v2/notifications` | ⬜ |
-| 2 | `GET /api/notifications/unread-count` | `GET /api/v2/notifications/unread-count` | ⬜ |
+| 1 | `GET /api/notifications` | `GET /api/v2/notifications` | ✅ |
+| 2 | `GET /api/notifications/unread-count` | `GET /api/v2/notifications/unread-count` | ✅ |
 | 3 | `PUT /api/notifications/<id>/read` | `PUT /api/v2/notifications/{id}/read` | ⬜ |
 | 4 | `PUT /api/notifications/read-all` | `PUT /api/v2/notifications/read-all` | ⬜ |
 | 5 | `DELETE /api/notifications/<id>` | `DELETE /api/v2/notifications/{id}` | ⬜ |
-| 6 | `DELETE /api/notifications/read` | `DELETE /api/v2/notifications/read` | ⬜ |
+| 6 | `DELETE /api/notifications/delete-read` | `DELETE /api/v2/notifications/delete-read` | ⬜ |
 | 7 | `GET /api/settings/slack` | `GET /api/v2/settings/slack` | ⬜ |
 | 8 | `PUT /api/settings/slack` | `PUT /api/v2/settings/slack` | ⬜ |
 | 9 | `POST /api/job-categories` | `POST /api/v2/job-categories` | ⬜ |
@@ -747,20 +747,131 @@ Complete remaining endpoints and utilities.
 | 13 | `PUT /api/pic-teams/<id>` | `PUT /api/v2/pic-teams/{id}` | ⬜ |
 | 14 | `DELETE /api/pic-teams/<id>` | `DELETE /api/v2/pic-teams/{id}` | ⬜ |
 
-### Tasks
+### Sub-Phases (Execution Order)
 
-- [ ] Create `src/fastapi_app/routers/notifications.py`
-- [ ] Create `src/fastapi_app/routers/settings.py`
-- [ ] Implement pagination for notifications
-- [ ] Port utility functions to async:
-  - [ ] `notifications.py` → async broadcast
-  - [ ] `email.py` → TBD (keep Flask-Mail until migrated)
-  - [ ] `slack.py` → httpx async client
+This phase is intentionally split by **logical API grouping** to keep each unit reviewable and testable end-to-end.
+
+| Sub-Phase | Scope | Endpoints | Primary Tests |
+|----------|-------|-----------|---------------|
+| **7A ✅** | Notifications (Read) | `GET /api/v2/notifications`, `GET /api/v2/notifications/unread-count` | `tests_fastapi/notifications/test_notifications_read.py` |
+| **7B** | Notifications (Mark Read) | `PUT /api/v2/notifications/{id}/read`, `PUT /api/v2/notifications/read-all` | `tests_fastapi/notifications/test_notifications_mark_read.py` |
+| **7C** | Notifications (Delete) | `DELETE /api/v2/notifications/{id}`, `DELETE /api/v2/notifications/delete-read` | `tests_fastapi/notifications/test_notifications_delete.py` |
+| **7D** | Settings (Slack) | `GET /api/v2/settings/slack`, `PUT /api/v2/settings/slack` | `tests_fastapi/settings/test_slack_settings.py` |
+| **7E** | Job Categories (Write) | `POST/PUT/DELETE /api/v2/job-categories` | `tests_fastapi/taxonomy_write/test_job_categories_write.py` |
+| **7F** | PIC Teams (Write) | `POST/PUT/DELETE /api/v2/pic-teams` | `tests_fastapi/taxonomy_write/test_pic_teams_write.py` |
+| **7G** | Utilities (Optional / Last) | Async Slack client + notifications helpers (no API) | Unit tests if applicable |
+
+### Detailed Plan (Per Sub-Phase)
+
+#### 7A — Notifications (Read)
+- Router: `src/fastapi_app/routers/notifications.py` + include in `src/fastapi_app/main.py`
+- Query params match Flask:
+  - `page` (default 1), `per_page` (default 20, max 100), `unread_only` (default false)
+  - `from`/`to` ISO date/datetime parsing:
+    - Accept `YYYY-MM-DD` or ISO datetime (`Z` or offset supported)
+    - Date-only `to` treated as inclusive day (`+1 day` then use `< to_dt`)
+    - Invalid format → `400 {"error":"Invalid date","message":"Invalid date"}`
+    - Invalid range (`from >= to`) → `400 {"error":"Invalid date range","message":"\"from\" must be earlier than \"to\"."}`
+- Response shapes match Flask:
+  - `GET /notifications`: `{"notifications":[...],"total":...,"page":...,"per_page":...,"total_pages":...,"range":{"from":...,"to":...}}`
+  - `GET /notifications/unread-count`: `{"unread_count":...,"range":{"from":...,"to":...}}`
+- Tests:
+  - Pagination defaults + max cap
+  - `unread_only` behavior
+  - Date parsing: `from` only, `to` date-only inclusive, invalid formats, invalid range
+  - Data isolation: only current user’s notifications returned
+
+#### 7B — Notifications (Mark Read)
+- `PUT /api/v2/notifications/{id}/read`:
+  - 404 `{"error":"Notification not found"}`
+  - 403 `{"error":"Forbidden: Cannot access other users notifications"}`
+  - 200 `{"message":"Notification marked as read","notification":{...}}`
+- `PUT /api/v2/notifications/read-all`:
+  - 200 `{"message":"All notifications marked as read","updated_count":...}`
+- Tests:
+  - Marking own notification sets `is_read=true` and `read_at` set
+  - Other user notification → 403
+  - `read-all` updates only unread rows and returns correct `updated_count`
+
+#### 7C — Notifications (Delete)
+- `DELETE /api/v2/notifications/{id}`:
+  - 404 `{"error":"Notification not found"}`
+  - 403 `{"error":"Forbidden: Cannot delete other users notifications"}`
+  - 200 `{"message":"Notification deleted successfully"}`
+- `DELETE /api/v2/notifications/delete-read`:
+  - Supports same `from`/`to` parsing behavior as 7A
+  - 200 `{"deleted_count": ...}`
+- Tests:
+  - Delete single: own vs other user; not-found
+  - Delete-read: deletes only read notifications; honors date range; invalid date/range → 400
+
+#### 7D — Settings (Slack)
+- Router: `src/fastapi_app/routers/settings.py` + include in `src/fastapi_app/main.py`
+- Admin-only RBAC (matches Flask)
+- Get-or-create behavior:
+  - On first access, create a single `SlackSettings` row with defaults (`is_enabled=false`, `webhook_url=null`, `channel=null`)
+- Response shapes match Flask:
+  - GET: `{"slack_settings": {...}}`
+  - PUT: `{"message":"Slack settings updated","slack_settings": {...}}`
+- Validation rules (Flask parity):
+  - Values are trimmed; empty strings become `null`
+  - If `is_enabled=true` and `webhook_url` missing/empty → `400 {"error":"Invalid settings","message":"webhook_url is required when Slack is enabled."}`
+- Tests:
+  - Admin can GET/PUT; non-admin forbidden
+  - PUT validation for enabled-without-webhook_url
+  - Empty string normalization
+
+#### 7E — Job Categories (Write)
+- Router: new `src/fastapi_app/routers/taxonomy_write.py` (keeps `src/fastapi_app/routers/taxonomy.py` read-only)
+- Admin-only RBAC (matches Flask)
+- `POST /api/v2/job-categories`:
+  - Requires `name`; optional `slug` (fallback to name), slugify and validate
+  - Duplicate slug → `409 {"error":"Duplicate slug","message":"Category slug \"...\" already exists."}`
+  - 201 `{"message":"Category created","category":{...}}`
+- `PUT /api/v2/job-categories/{id}`:
+  - Not found → `404 {"error":"Not found","message":"No category found with ID: ..."}`
+  - If `name` present: derive slug from name and keep slug strictly aligned
+  - Special case: `"general"` cannot be renamed → `400 {"error":"Invalid category","message":"The \"General\" category cannot be renamed."}`
+  - Reject explicit slug edits → `400 {"error":"Invalid payload","message":"Slug cannot be edited directly; it is derived from name."}`
+  - If slug changes: update `Job.category` values from old slug → new slug; return `jobs_updated`
+  - 200 `{"message":"Category updated","category":{...},"jobs_updated":...}`
+- `DELETE /api/v2/job-categories/{id}`:
+  - Soft-disable (`is_active=false`)
+  - 200 `{"message":"Category disabled","category":{...}}`
+- Tests:
+  - Create: required name; duplicate slug 409; slugify behavior
+  - Update: rename general rejected; slug key rejected; slug change updates jobs and returns `jobs_updated`
+  - Delete: sets `is_active=false`
+
+#### 7F — PIC Teams (Write)
+- Router: `src/fastapi_app/routers/taxonomy_write.py`
+- Admin-only RBAC (matches Flask)
+- `POST /api/v2/pic-teams`:
+  - Requires `name` and `slack_handle`; optional `slug` (fallback to name), slugify and validate
+  - Duplicate slug → `409 {"error":"Duplicate slug","message":"PIC team slug \"...\" already exists."}`
+  - 201 `{"message":"PIC team created","pic_team":{...}}`
+- `PUT /api/v2/pic-teams/{id}`:
+  - Not found → `404 {"error":"Not found","message":"No PIC team found with ID: ..."}`
+  - If `name` present: derive slug from name; reject explicit slug key; if slug changes update `Job.pic_team` values and return `jobs_updated`
+  - `slack_handle` cannot be empty → `400 {"error":"Invalid slack_handle","message":"slack_handle cannot be empty."}`
+  - 200 `{"message":"PIC team updated","pic_team":{...},"jobs_updated":...}`
+- `DELETE /api/v2/pic-teams/{id}`:
+  - Soft-disable (`is_active=false`)
+  - 200 `{"message":"PIC team disabled","pic_team":{...}}`
+- Tests:
+  - Create: required `slack_handle`; duplicate slug 409
+  - Update: slug key rejected; name change updates jobs + returns `jobs_updated`; slack_handle empty rejected
+  - Delete: sets `is_active=false`
+
+#### 7G — Utilities (Optional / Last)
+- Slack sender: consider `httpx.AsyncClient` and reuse `SlackSettings` from DB (do not add scheduler side-effects here)
+- Notifications helper(s): keep DB operations in services layer; avoid coupling to request handlers
+- Tests: only if behavior is isolated and unit-testable; otherwise validate via endpoint tests above
 
 ### Deliverables
-- [ ] All endpoints on `/api/v2/`
-- [ ] Async email/Slack utilities
-- [ ] Feature parity with Flask
+- [ ] Sub-phases 7A–7F fully implemented + tests passing (`venv/bin/python -m pytest -q tests_fastapi`)
+- [ ] Swagger updated automatically via FastAPI routers/schemas
+- [ ] Feature parity with Flask for the endpoints above
 
 ### Notes
 ```
@@ -1660,8 +1771,8 @@ Job 2,0 6 * * 1,reports,analytics,2025-12-31,myorg,repo2,report.yml,enable
 | `page` | int | 1 | Page number |
 | `per_page` | int | 20 | Items per page (max: 100) |
 | `unread_only` | bool | false | Only unread notifications |
-| `from` | datetime | - | Filter by created_at start |
-| `to` | datetime | - | Filter by created_at end |
+| `from` | string | - | ISO date/datetime (inclusive). Accepts `YYYY-MM-DD` |
+| `to` | string | - | ISO date/datetime (exclusive). Date-only treated as inclusive day |
 
 **Response (200):**
 ```json
@@ -1683,16 +1794,30 @@ Job 2,0 6 * * 1,reports,analytics,2025-12-31,myorg,repo2,report.yml,enable
   "total": 45,
   "page": 1,
   "per_page": 20,
-  "total_pages": 3
+  "total_pages": 3,
+  "range": {
+    "from": "2025-12-01T00:00:00",
+    "to": "2025-12-23T00:00:00"
+  }
 }
 ```
 
 #### GET `/api/v2/notifications/unread-count`
 
+**Query Parameters (optional):**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `from` | string | ISO date/datetime (inclusive). Accepts `YYYY-MM-DD` |
+| `to` | string | ISO date/datetime (exclusive). Date-only treated as inclusive day |
+
 **Response (200):**
 ```json
 {
-  "unread_count": 12
+  "unread_count": 12,
+  "range": {
+    "from": "2025-12-01T00:00:00",
+    "to": "2025-12-23T00:00:00"
+  }
 }
 ```
 
@@ -1733,7 +1858,7 @@ Job 2,0 6 * * 1,reports,analytics,2025-12-31,myorg,repo2,report.yml,enable
 ```json
 {
   "name": "Analytics Jobs",
-  "slug": "analytics"  // Optional, auto-generated from name if omitted
+  "slug": "analytics"
 }
 ```
 
@@ -1771,8 +1896,8 @@ Job 2,0 6 * * 1,reports,analytics,2025-12-31,myorg,repo2,report.yml,enable
 ```json
 {
   "name": "QA Team",
-  "slug": "qa",  // Optional
-  "slack_handle": "@qa-team"  // Optional
+  "slug": "qa",
+  "slack_handle": "@qa-team"
 }
 ```
 
@@ -1785,12 +1910,14 @@ Job 2,0 6 * * 1,reports,analytics,2025-12-31,myorg,repo2,report.yml,enable
 **Response (200):**
 ```json
 {
-  "id": "settings-uuid",
-  "is_enabled": true,
-  "webhook_url": "https://hooks.slack.com/services/...",
-  "channel": "#cron-alerts",
-  "created_at": "2025-01-15T10:30:00Z",
-  "updated_at": "2025-01-15T10:30:00Z"
+  "slack_settings": {
+    "id": "settings-uuid",
+    "is_enabled": true,
+    "webhook_url": "https://hooks.slack.com/services/...",
+    "channel": "#cron-alerts",
+    "created_at": "2025-01-15T10:30:00Z",
+    "updated_at": "2025-01-15T10:30:00Z"
+  }
 }
 ```
 
@@ -1802,6 +1929,21 @@ Job 2,0 6 * * 1,reports,analytics,2025-12-31,myorg,repo2,report.yml,enable
   "is_enabled": true,
   "webhook_url": "https://hooks.slack.com/services/...",
   "channel": "#cron-alerts"
+}
+```
+
+**Response (200):**
+```json
+{
+  "message": "Slack settings updated",
+  "slack_settings": {
+    "id": "settings-uuid",
+    "is_enabled": true,
+    "webhook_url": "https://hooks.slack.com/services/...",
+    "channel": "#cron-alerts",
+    "created_at": "2025-01-15T10:30:00Z",
+    "updated_at": "2025-01-15T10:30:00Z"
+  }
 }
 ```
 
