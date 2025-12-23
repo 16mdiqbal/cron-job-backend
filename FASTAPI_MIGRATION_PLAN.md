@@ -340,7 +340,7 @@ See [DATABASE_SEPARATION.md](DATABASE_SEPARATION.md) for details.
 
 ## Phase 4: Health & Read-Only Endpoints (Days 10-12)
 
-### Status: 🟨 In Progress (4A ✅, 4B ✅, 4C ✅)
+### Status: 🟨 In Progress (4A ✅, 4B ✅, 4C ✅, 4D ✅)
 
 ### Objective
 Migrate low-risk, read-only endpoints first for validation.
@@ -362,9 +362,9 @@ Migrate low-risk, read-only endpoints first for validation.
   - [x] `GET /api/jobs/<id>/executions/stats` → `GET /api/v2/jobs/{id}/executions/stats` (JWT)
 
 - **Phase 4D: Executions (Read)**
-  - [ ] `GET /api/executions` → `GET /api/v2/executions` (JWT)
-  - [ ] `GET /api/executions/<execution_id>` → `GET /api/v2/executions/{execution_id}` (JWT)
-  - [ ] `GET /api/executions/statistics` → `GET /api/v2/executions/statistics` (JWT)
+  - [x] `GET /api/executions` → `GET /api/v2/executions` (JWT)
+  - [x] `GET /api/executions/<execution_id>` → `GET /api/v2/executions/{execution_id}` (JWT)
+  - [x] `GET /api/executions/statistics` → `GET /api/v2/executions/statistics` (JWT)
 
 - **Phase 4E: Taxonomy (Read)**
   - [ ] `GET /api/job-categories` → `GET /api/v2/job-categories` (JWT)
@@ -386,6 +386,9 @@ Phase 4B tests:
 
 Phase 4C tests:
 - [x] `tests_fastapi/executions/test_job_executions_read.py`
+
+Phase 4D tests:
+- [x] `tests_fastapi/executions/test_executions_global_read.py`
 
 ### Deliverables
 - [ ] Phase 4B–4E endpoints on `/api/v2/`
@@ -1304,16 +1307,19 @@ Job 2,0 6 * * 1,reports,analytics,2025-12-31,myorg,repo2,report.yml,enable
 
 #### GET `/api/v2/executions`
 
+**Headers:** `Authorization: Bearer <access_token>`
+
 **Query Parameters:**
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `page` | int | 1 | Page number |
-| `per_page` | int | 20 | Items per page (max: 100) |
-| `job_id` | uuid | - | Filter by job |
-| `status` | string | - | `success`, `failed`, `running` |
-| `trigger_type` | string | - | `scheduled`, `manual` |
-| `from` | datetime | - | Start date filter (ISO format) |
-| `to` | datetime | - | End date filter (ISO format) |
+| `limit` | int | 20 | Page size (max: 200) |
+| `job_id` | uuid | - | Filter by job id |
+| `status` | string | - | `success|failed|running` (or comma-separated list) |
+| `trigger_type` | string | - | `scheduled|manual` |
+| `execution_type` | string | - | `github_actions|webhook` |
+| `from` | string | - | ISO date/datetime (inclusive, UTC) |
+| `to` | string | - | ISO date/datetime (exclusive, UTC). Date-only treated as inclusive day |
 
 **Response (200):**
 ```json
@@ -1323,6 +1329,7 @@ Job 2,0 6 * * 1,reports,analytics,2025-12-31,myorg,repo2,report.yml,enable
       "id": "exec-uuid",
       "job_id": "job-uuid",
       "job_name": "Daily Backup Job",
+      "github_repo": "myrepo",
       "status": "success",
       "trigger_type": "scheduled",
       "started_at": "2025-12-22T02:00:00Z",
@@ -1336,8 +1343,33 @@ Job 2,0 6 * * 1,reports,analytics,2025-12-31,myorg,repo2,report.yml,enable
   ],
   "total": 1250,
   "page": 1,
-  "per_page": 20,
+  "limit": 20,
   "total_pages": 63
+}
+```
+
+#### GET `/api/v2/executions/{execution_id}`
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Response (200):**
+```json
+{
+  "execution": {
+    "id": "exec-uuid",
+    "job_id": "job-uuid",
+    "job_name": "Daily Backup Job",
+    "github_repo": "myrepo",
+    "status": "success",
+    "trigger_type": "scheduled",
+    "started_at": "2025-12-22T02:00:00Z",
+    "completed_at": "2025-12-22T02:00:15Z",
+    "duration_seconds": 15.234,
+    "execution_type": "github_actions",
+    "target": "myorg/myrepo/backup.yml",
+    "response_status": 204,
+    "error_message": null
+  }
 }
 ```
 
@@ -1347,8 +1379,8 @@ Job 2,0 6 * * 1,reports,analytics,2025-12-31,myorg,repo2,report.yml,enable
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `job_id` | uuid | Optional: filter by job |
-| `from` | datetime | Optional: start date |
-| `to` | datetime | Optional: end date |
+| `from` | string | Optional: ISO date/datetime (inclusive) |
+| `to` | string | Optional: ISO date/datetime (exclusive). Date-only treated as inclusive day |
 
 **Response (200):**
 ```json
@@ -1361,7 +1393,7 @@ Job 2,0 6 * * 1,reports,analytics,2025-12-31,myorg,repo2,report.yml,enable
   "average_duration_seconds": 12.5,
   "range": {
     "from": "2025-12-01T00:00:00Z",
-    "to": "2025-12-22T23:59:59Z"
+    "to": "2025-12-23T00:00:00Z"
   }
 }
 ```

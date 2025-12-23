@@ -63,3 +63,31 @@ class JobExecutionStatsReadResponse(BaseModel):
     statistics: JobExecutionStatistics
     latest_execution: Optional[ExecutionReadPayload] = None
 
+
+class ExecutionWithJobReadPayload(ExecutionReadPayload):
+    model_config = ConfigDict(extra="ignore")
+
+    job_name: Optional[str] = None
+    github_repo: Optional[str] = None
+
+
+class ExecutionsListReadResponse(BaseModel):
+    executions: List[ExecutionWithJobReadPayload]
+    total: int
+    page: int
+    limit: int
+    total_pages: int
+
+
+class ExecutionGetReadResponse(BaseModel):
+    execution: ExecutionWithJobReadPayload
+
+
+class ExecutionStatisticsReadResponse(BaseModel):
+    total_executions: int
+    successful_executions: int
+    failed_executions: int
+    running_executions: int
+    success_rate: float
+    average_duration_seconds: float
+    range: Dict[str, Optional[str]]
