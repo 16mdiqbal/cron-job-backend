@@ -279,7 +279,7 @@ async def get_optional_user(token: str = Depends(oauth2_scheme_optional)) -> Opt
 ### Deliverables
 - [x] FastAPI auth dependencies complete
 - [x] Single Sign-On across both stacks
-- [x] FastAPI tests passing (`tests_fastapi/`, 31 tests)
+- [x] FastAPI tests passing (`tests_fastapi/`, 54 tests)
 
 ### Notes
 ```
@@ -340,7 +340,7 @@ See [DATABASE_SEPARATION.md](DATABASE_SEPARATION.md) for details.
 
 ## Phase 4: Health & Read-Only Endpoints (Days 10-12)
 
-### Status: 🟨 In Progress (4A ✅, 4B ✅, 4C ✅, 4D ✅)
+### Status: ✅ Completed (4A ✅, 4B ✅, 4C ✅, 4D ✅, 4E ✅)
 
 ### Objective
 Migrate low-risk, read-only endpoints first for validation.
@@ -357,29 +357,35 @@ Migrate low-risk, read-only endpoints first for validation.
   - [x] Response parity: returns `{count, jobs}` and `{job}` with `last_execution_at` + `next_execution_at`
 
 - **Phase 4C: Job Executions (Read)**
+  - ✅ Implemented with filter support (`limit`, `status`, `trigger_type`, `from`, `to`)
   - [x] `GET /api/jobs/<id>/executions` → `GET /api/v2/jobs/{id}/executions` (JWT)
   - [x] `GET /api/jobs/<id>/executions/<execution_id>` → `GET /api/v2/jobs/{id}/executions/{execution_id}` (JWT)
   - [x] `GET /api/jobs/<id>/executions/stats` → `GET /api/v2/jobs/{id}/executions/stats` (JWT)
 
 - **Phase 4D: Executions (Read)**
+  - ✅ Implemented with pagination + filters (`page`, `limit`, `job_id`, `status`, `trigger_type`, `execution_type`, `from`, `to`)
   - [x] `GET /api/executions` → `GET /api/v2/executions` (JWT)
   - [x] `GET /api/executions/<execution_id>` → `GET /api/v2/executions/{execution_id}` (JWT)
   - [x] `GET /api/executions/statistics` → `GET /api/v2/executions/statistics` (JWT)
 
 - **Phase 4E: Taxonomy (Read)**
-  - [ ] `GET /api/job-categories` → `GET /api/v2/job-categories` (JWT)
-  - [ ] `GET /api/pic-teams` → `GET /api/v2/pic-teams` (JWT)
+  - ✅ Implemented with role-aware `include_inactive` (admin-only)
+  - [x] `GET /api/job-categories` → `GET /api/v2/job-categories` (JWT)
+  - [x] `GET /api/pic-teams` → `GET /api/v2/pic-teams` (JWT)
 
 ### Tasks
 
-- [ ] Implement routers per group (recommended):
+- [x] Implement routers per group (recommended):
   - [x] `src/fastapi_app/routers/jobs.py` (Phase 4B)
   - [x] `src/fastapi_app/routers/executions.py` (Phase 4C/4D)
-  - [ ] `src/fastapi_app/routers/taxonomy.py` (Phase 4E: job-categories + pic-teams)
-- [ ] Add Pydantic response models (reuse `src/fastapi_app/schemas/*`)
-- [ ] Add pagination/filter/sort where present in Flask
-- [ ] Add parity tests (Flask vs FastAPI responses) + auth enforcement tests
-- [ ] Keep tests split by service under `tests_fastapi/` (e.g. `tests_fastapi/jobs/`, `tests_fastapi/executions/`, `tests_fastapi/taxonomy/`)
+  - [x] `src/fastapi_app/routers/taxonomy.py` (Phase 4E: job-categories + pic-teams)
+- [x] Add response-shape parity schemas for Phase 4
+  - [x] `src/fastapi_app/schemas/jobs_read.py`
+  - [x] `src/fastapi_app/schemas/executions_read.py`
+  - [x] `src/fastapi_app/schemas/taxonomy_read.py`
+- [x] Add automated tests (FastAPI response shape + auth enforcement)
+- [x] Keep tests split by service under `tests_fastapi/` (e.g. `tests_fastapi/jobs/`, `tests_fastapi/executions/`, `tests_fastapi/taxonomy/`)
+- [ ] Optional: add cross-stack JSON diff parity tests (Flask ↔ FastAPI) against a running local server
 
 Phase 4B tests:
 - [x] `tests_fastapi/jobs/test_jobs_read.py`
@@ -390,14 +396,19 @@ Phase 4C tests:
 Phase 4D tests:
 - [x] `tests_fastapi/executions/test_executions_global_read.py`
 
+Phase 4E tests:
+- [x] `tests_fastapi/taxonomy/test_taxonomy_read.py`
+
 ### Deliverables
-- [ ] Phase 4B–4E endpoints on `/api/v2/`
-- [ ] OpenAPI documentation
-- [ ] Response parity validated
+- [x] Phase 4 endpoints on `/api/v2/` (4A–4E)
+- [x] OpenAPI/Swagger updated automatically (see `http://127.0.0.1:8001/docs`)
+- [x] Automated tests added for all Phase 4 endpoints
 
 ### Notes
-```
-<!-- Add implementation notes here -->
+Verified locally:
+```bash
+venv/bin/python -m pytest -q tests_fastapi
+# 54 passed
 ```
 
 ---
@@ -1448,9 +1459,16 @@ Job 2,0 6 * * 1,reports,analytics,2025-12-31,myorg,repo2,report.yml,enable
 
 ---
 
-### Categories & Teams Endpoints
+### Categories & Teams Endpoints (Read-Only in Phase 4)
 
 #### GET `/api/v2/job-categories`
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Query Parameters (optional):**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `include_inactive` | bool | false | Admin-only: include inactive categories |
 
 **Response (200):**
 ```json
@@ -1470,6 +1488,8 @@ Job 2,0 6 * * 1,reports,analytics,2025-12-31,myorg,repo2,report.yml,enable
 
 #### POST `/api/v2/job-categories`
 
+**Status:** Not implemented yet (planned in Phase 7)
+
 **Request:**
 ```json
 {
@@ -1480,10 +1500,17 @@ Job 2,0 6 * * 1,reports,analytics,2025-12-31,myorg,repo2,report.yml,enable
 
 #### GET `/api/v2/pic-teams`
 
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Query Parameters (optional):**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `include_inactive` | bool | false | Admin-only: include inactive PIC teams |
+
 **Response (200):**
 ```json
 {
-  "teams": [
+  "pic_teams": [
     {
       "id": "team-uuid",
       "slug": "devops",
@@ -1498,6 +1525,8 @@ Job 2,0 6 * * 1,reports,analytics,2025-12-31,myorg,repo2,report.yml,enable
 ```
 
 #### POST `/api/v2/pic-teams`
+
+**Status:** Not implemented yet (planned in Phase 7)
 
 **Request:**
 ```json
@@ -1605,6 +1634,15 @@ Job 2,0 6 * * 1,reports,analytics,2025-12-31,myorg,repo2,report.yml,enable
 | 2 | Async DB session + model compatibility | `tests_fastapi/database/test_async_session.py` | ✅ |
 | 3 | Auth flows + cross-stack JWT | `tests_fastapi/auth/*` | ✅ |
 
+### Phase 4: Automated FastAPI Endpoint Coverage
+
+| Sub-phase | Area | Tests | Status |
+|----------:|------|-------|--------|
+| 4B | Jobs (read) | `tests_fastapi/jobs/test_jobs_read.py` | ✅ |
+| 4C | Job executions (read) | `tests_fastapi/executions/test_job_executions_read.py` | ✅ |
+| 4D | Executions (read) | `tests_fastapi/executions/test_executions_global_read.py` | ✅ |
+| 4E | Taxonomy (read) | `tests_fastapi/taxonomy/test_taxonomy_read.py` | ✅ |
+
 Run the FastAPI-only suite:
 ```bash
 venv/bin/python -m pytest -q tests_fastapi
@@ -1623,6 +1661,8 @@ venv/bin/python -m pytest -q tests_fastapi
 | Viewer token → Write endpoint | 403 Forbidden | ✅ |
 
 ### Phase 4: Response Parity Tests
+
+Automated tests cover response **shape** and auth enforcement for all Phase 4 endpoints. Use the curl/jq workflow below if you want to validate **cross-stack response parity** against a running Flask + FastAPI instance.
 
 For each read-only endpoint, compare Flask and FastAPI responses:
 
