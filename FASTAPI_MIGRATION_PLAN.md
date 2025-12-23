@@ -415,10 +415,16 @@ venv/bin/python -m pytest -q tests_fastapi
 
 ## Phase 5: Write Operations - Jobs CRUD (Days 13-17)
 
-### Status: ⬜ Not Started
+### Status: ⏳ Planned (split into sub-phases)
 
 ### Objective
 Migrate job creation, update, and deletion with full validation.
+
+### Scope (Confirmed)
+
+- **DB-first (no scheduler side-effects):** FastAPI write endpoints will **not** add/reschedule/remove APScheduler jobs. Scheduler wiring stays in **Phase 8**.
+- **Manual execute is allowed:** `POST /jobs/{id}/execute` can trigger an on-demand run (like Flask), but does not alter background schedules.
+- **No Flask changes:** Flask remains the source of truth for background scheduling during this phase.
 
 ### Endpoints to Migrate
 
@@ -433,27 +439,46 @@ Migrate job creation, update, and deletion with full validation.
 | 7 | `POST /api/jobs/cron-preview` | `POST /api/v2/jobs/cron-preview` | Low | ⬜ |
 | 8 | `POST /api/jobs/test-run` | `POST /api/v2/jobs/test-run` | Medium | ⬜ |
 
-### Tasks
+### Sub-Phases (Execution Order)
 
-- [ ] Create `JobCreate` Pydantic model with validators
-  - [ ] Cron expression validation
-  - [ ] Email list parsing
-  - [ ] GitHub fields validation
-  - [ ] End date must be future
-- [ ] Create `JobUpdate` Pydantic model
-- [ ] Implement authorization dependencies
-  - [ ] Admin can modify any job
-  - [ ] User can modify own jobs only
-  - [ ] Viewer cannot modify
-- [ ] Port CSV bulk upload with async file handling
-- [ ] Integrate with APScheduler
-- [ ] Add notification broadcasts on changes
+| Sub-Phase | Goal | Endpoints | Primary Test Location |
+|----------:|------|-----------|------------------------|
+| **5A** | Job create (validation + RBAC) | `POST /api/v2/jobs` | `tests_fastapi/jobs_write/test_create.py` |
+| **5B** | Job update (partial update + ownership rules) | `PUT /api/v2/jobs/{id}` | `tests_fastapi/jobs_write/test_update.py` |
+| **5C** | Job delete (parity behavior + RBAC) | `DELETE /api/v2/jobs/{id}` | `tests_fastapi/jobs_write/test_delete.py` |
+| **5D** | Manual execute (execution record + trigger) | `POST /api/v2/jobs/{id}/execute` | `tests_fastapi/jobs_write/test_execute.py` |
+| **5E** | Bulk CSV upload (validation + partial success) | `POST /api/v2/jobs/bulk-upload` | `tests_fastapi/jobs_write/test_bulk_upload.py` |
+| **5F** | Cron utilities | `POST /api/v2/jobs/validate-cron`, `POST /api/v2/jobs/cron-preview`, `POST /api/v2/jobs/test-run` | `tests_fastapi/cron_tools/*` |
+
+### Implementation Notes (Guidelines)
+
+- Prefer adding write endpoints to the existing Jobs router (or a separate `jobs_write.py` router under the **Jobs** tag) while keeping read endpoints stable.
+- Keep **response shapes** consistent with Flask where feasible (especially error keys like `error` + `message`), so frontend parity is predictable.
+- Ensure all DB writes are done via async SQLAlchemy sessions (`src/database/session.py`).
+- Avoid external calls in tests:
+  - Stub/mocks for webhook/GitHub calls.
+  - For manual execute, assert **execution rows** created and that the trigger function is called, without leaving the process.
+
+### Test Strategy (Must-Haves)
+
+- **RBAC matrix** for each endpoint:
+  - `admin`: allowed
+  - `user`: allowed on own jobs; forbidden for other users where applicable
+  - `viewer`: forbidden for all write endpoints
+- **Validation coverage**:
+  - Required fields (`name`, `cron_expression`, `category`, `pic_team`, `end_date`)
+  - Target config: webhook vs GitHub fields (mutual requirements)
+  - Duplicate name conflict behavior
+  - Date range/cutoffs (`end_date` must be future)
+- **Side-effect boundaries**:
+  - Verify FastAPI does **not** register APScheduler jobs (no scheduler manipulation in Phase 5).
+  - Manual execute should not persist scheduler state changes.
 
 ### Deliverables
-- [ ] Complete Jobs CRUD on FastAPI
-- [ ] CSV file upload working
-- [ ] Scheduler integration verified
-- [ ] Authorization working correctly
+- [ ] Phase 5A–5F endpoints implemented and documented
+- [ ] FastAPI tests added for each sub-phase and passing (`venv/bin/python -m pytest -q tests_fastapi`)
+- [ ] No APScheduler add/reschedule/remove logic in FastAPI (Phase 8 responsibility)
+- [ ] RBAC + validation coverage complete for write flows
 
 ### Notes
 ```
@@ -561,23 +586,48 @@ Complete remaining endpoints and utilities.
 ### Status: ⬜ Not Started
 
 ### Objective
-Migrate scheduler to FastAPI lifespan and complete transition.
+Migrate APScheduler runtime + scheduler side-effects to FastAPI and complete the cutover from Flask.
+
+This phase explicitly includes the **scheduler side-effects deferred from Phase 5**, such as scheduling/rescheduling/removing jobs when jobs are created/updated/deleted.
+
+### Scope (What moves here from Phase 5)
+
+- **APScheduler job registration** on job create/update/delete
+- **Enable/disable behavior**: adding/removing jobs from the scheduler when `is_active` changes
+- **Scheduler startup/shutdown** under FastAPI lifespan
+- **Single-runner guarantees** (lock file / leader election)
 
 ### Tasks
 
-- [ ] Refactor `src/scheduler/job_executor.py`
-  - [ ] Remove `_flask_app` global
-  - [ ] Remove `app.app_context()` pattern
-  - [ ] Use standalone async database sessions
-- [ ] Implement FastAPI lifespan events
-- [ ] Update frontend API base URL
-  - [ ] Modify `cron-job-frontend/src/constants/api.ts`
-- [ ] Run full regression tests
-- [ ] Configure proxy redirect `/api/*` → `/api/v2/*`
-- [ ] Monitor for 1 week with fallback
-- [ ] Remove Flask code and dependencies
-- [ ] Update `requirements.txt` (remove Flask packages)
-- [ ] Update documentation
+- [ ] Refactor scheduler runtime to be framework-agnostic
+  - [ ] Refactor `src/scheduler/job_executor.py` to remove Flask app context coupling
+  - [ ] Use shared DB utilities (`src/database/session.py`) instead of `current_app`/Flask globals
+  - [ ] Ensure all timestamps/timezones match Flask behavior (JST cron interpretation)
+
+- [ ] Implement scheduler lifecycle in FastAPI
+  - [ ] Start scheduler in FastAPI lifespan when `SCHEDULER_ENABLED=true`
+  - [ ] Add/keep a lock mechanism (similar to Flask’s `src/instance/scheduler.lock`) so only one process runs schedules
+  - [ ] Graceful shutdown: stop scheduler and release lock
+
+- [ ] Implement scheduler side-effects for job writes (deferred from Phase 5)
+  - [ ] On `POST /api/v2/jobs`: schedule new job if active
+  - [ ] On `PUT /api/v2/jobs/{id}`: reschedule if cron/active state changes
+  - [ ] On `DELETE /api/v2/jobs/{id}`: remove from scheduler (or disable, matching Flask behavior)
+  - [ ] Ensure behavior is safe when scheduler is not running in the current process (best-effort + no hard failure)
+
+- [ ] Scheduler + cutover test plan
+  - [ ] Add integration tests for scheduler leadership/lock (single runner)
+  - [ ] Add tests asserting side-effects happen only when scheduler is running/enabled
+  - [ ] Run full regression:
+    - [ ] `venv/bin/python -m pytest -q tests_fastapi`
+    - [ ] `venv/bin/python -m pytest -q test`
+
+- [ ] Cutover steps
+  - [ ] Update frontend API base URL to `/api/v2`
+  - [ ] Configure proxy redirect `/api/*` → `/api/v2/*` (or switch frontend env)
+  - [ ] Monitor for 1 week with fallback plan
+  - [ ] Remove Flask code and dependencies after stability window
+  - [ ] Update docs + `requirements.txt` cleanup
 
 ### Frontend Changes Required
 
@@ -604,11 +654,12 @@ async def execute_job_async(job_id):
 ```
 
 ### Deliverables
-- [ ] Scheduler running under FastAPI
-- [ ] Frontend fully migrated
-- [ ] Flask code removed
-- [ ] Clean FastAPI-only codebase
-- [ ] All tests passing
+- [ ] Scheduler running under FastAPI lifespan (single runner)
+- [ ] Scheduler side-effects wired into FastAPI job write endpoints (create/update/delete/enable/disable)
+- [ ] Frontend fully migrated to `/api/v2`
+- [ ] Proxy cutover completed with rollback option
+- [ ] Flask code removed after stability window
+- [ ] All tests passing (Flask + FastAPI suites)
 
 ### Notes
 ```
