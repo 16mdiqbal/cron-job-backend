@@ -891,7 +891,7 @@ venv/bin/python -m pytest -q tests_fastapi
 
 ## Phase 8: Scheduler Migration & Cutover (Days 25-30)
 
-### Status: 🟨 In Progress (8A ✅, 8B ✅, 8C ✅, 8D ✅, 8E ✅)
+### Status: 🟨 In Progress (8A ✅, 8B ✅, 8C ✅, 8D ✅, 8E ✅, 8F ✅ — cutover execution pending)
 
 ### Objective
 Migrate APScheduler runtime + scheduler side-effects to FastAPI and complete the cutover from Flask.
@@ -916,7 +916,7 @@ Phase 8 is split to keep scheduler changes safe and reviewable. **No Phase 8 imp
 | **8C ✅** | FastAPI lifecycle integration | Start/stop APScheduler in FastAPI lifespan; expose status via health | `tests_fastapi/scheduler/test_scheduler_lifecycle.py` |
 | **8D ✅** | Job write side-effects wiring | Create/update/delete/enable/disable schedule updates (best-effort when scheduler not running in-process) | `tests_fastapi/scheduler/test_scheduler_side_effects.py` |
 | **8E ✅** | Scheduler regression tests | Timezone correctness (JST), end_date behavior, duplicate prevention | `tests_fastapi/scheduler/test_scheduler_regression.py` |
-| **8F** | Cutover plan + deprecation | Frontend base URL/proxy cutover, monitoring, rollback steps | Docs + runbooks |
+| **8F ✅** | Cutover plan + deprecation | Frontend base URL/proxy cutover, monitoring, rollback steps | Docs + runbooks |
 
 ### Detailed Plan (Per Sub-Phase)
 
@@ -980,11 +980,79 @@ Implemented:
 - Regression coverage: `tests_fastapi/scheduler/test_scheduler_regression.py`
 
 #### 8F — Cutover plan + deprecation
-- Cutover steps:
-  - Update frontend API base URL to `/api/v2`
-  - Configure proxy redirect `/api/*` → `/api/v2/*` (or switch frontend env)
-  - Monitor for 1 week with rollback plan
-  - Remove Flask code + dependencies after stability window (final cleanup)
+
+**Goal:** Make FastAPI (`/api/v2`) the default production API and migrate scheduler ownership from Flask → FastAPI safely, with a clear rollback path. This sub-phase is primarily **runbook/documentation** plus a deployment checklist.
+
+##### Cutover Preconditions (Must be true before switching traffic)
+- `venv/bin/python -m pytest -q tests_fastapi` is green (CI or locally).
+- FastAPI is deployed with the same `SECRET_KEY`/`JWT_SECRET_KEY` as Flask (tokens remain compatible).
+- Database URLs are correct:
+  - If using a **single shared DB**, ensure both Flask and FastAPI point at the same DB during cutover.
+  - If using separate DBs, ensure data migration/replication plan exists (not recommended for cutover).
+- Scheduler topology chosen (see “Scheduler Ownership” below) so only **one** scheduler runs.
+
+##### Scheduler Ownership (Recommended Deployment Topology)
+APScheduler is started by FastAPI when:
+- `SCHEDULER_ENABLED=true` and `TESTING=false`
+- the process acquires the scheduler lock
+
+**Important limitation:** the current leader election is a **file lock** (`SCHEDULER_LOCK_PATH`). This only provides single-runner guarantees when all scheduler candidates share the same filesystem path (single host, or shared volume). For multi-node deployments without a shared lock path, prefer a dedicated scheduler instance or migrate to a distributed lock (DB/Redis) later.
+
+Recommended options:
+- **Option A (recommended): dedicated scheduler instance**
+  - Deploy one FastAPI instance with `SCHEDULER_ENABLED=true`
+  - Deploy all other FastAPI instances with `SCHEDULER_ENABLED=false`
+  - This avoids relying on a shared lock path across hosts.
+- **Option B (single host / shared volume): leader-only via lock**
+  - Set `SCHEDULER_ENABLED=true` on all instances
+  - Set `SCHEDULER_LOCK_PATH` to a shared location
+  - Verify only one instance reports `scheduler_running=true` in `/api/v2/health`
+
+##### Traffic Cutover (API)
+Preferred sequence:
+1. **Deploy FastAPI** alongside Flask (no traffic change yet).
+2. Validate endpoints manually via Swagger:
+   - `GET /api/v2/health` (confirm `scheduler_running` as expected for your topology)
+   - Smoke a few critical flows: login, list jobs, create job, update job, execute job.
+3. **Switch frontend** to FastAPI:
+   - Update frontend `API_BASE` to `/api/v2` (or environment-specific base URL).
+4. Keep Flask available for rollback during the observation window.
+
+Optional (later, once stable): proxy `/api/*` → `/api/v2/*` to make v2 the default path without frontend changes. Do this only after you are confident rollback is not needed.
+
+##### Monitoring During Observation Window (Recommended 7 days)
+- Health:
+  - `GET /api/v2/health` → verify `scheduler_running` and `scheduled_jobs_count` are sane
+- Scheduler logs:
+  - Confirm only the expected instance is running the scheduler (leader)
+  - Watch for repeated lock acquisition failures or rapid restarts
+- Business metrics:
+  - Job executions continue to be created (`job_executions` table grows)
+  - Notifications still delivered (Slack, email if enabled)
+- Error budgets:
+  - Monitor FastAPI 5xx rate, latency, and auth failures (401/403 spikes)
+
+##### Rollback Plan (FastAPI → Flask)
+Rollback should be quick and reversible:
+1. Switch frontend back to Flask base (`/api`) or revert proxy to Flask.
+2. Disable FastAPI scheduler:
+   - Set `SCHEDULER_ENABLED=false` on FastAPI instances (or scale down the scheduler instance).
+3. Ensure Flask scheduler is enabled (if rollback requires Flask scheduling):
+   - Set `SCHEDULER_ENABLED=true` for Flask (and verify it is running).
+4. Validate:
+   - `GET /api/health` (Flask) and `GET /api/v2/health` (FastAPI) return expected values.
+
+##### Deprecation Checklist (After Stability Window)
+Only after stable operation:
+- Freeze Flask endpoints (read-only or stop serving `/api`).
+- Remove Flask server runtime from deploy stack.
+- Remove Flask-only deps and scripts:
+  - `start_server.sh`, `src/app.py`, Flask middleware/config
+- Delete or archive legacy Flask tests under `test/` once no longer needed.
+- Update README and ops docs to state FastAPI as the only supported runtime.
+
+Implemented (documentation/runbook):
+- This section (8F) defines the cutover/rollback/deprecation checklist.
 
 ### Validation & Regression
 - FastAPI suite (must pass): `venv/bin/python -m pytest -q tests_fastapi`
@@ -1017,6 +1085,7 @@ async def execute_job_async(job_id):
 ### Deliverables
 - [x] Scheduler running under FastAPI lifespan (single runner)
 - [x] Scheduler side-effects wired into FastAPI job write endpoints (create/update/delete/enable/disable)
+- [x] Cutover/rollback/deprecation runbook documented (Phase 8F)
 - [ ] Frontend fully migrated to `/api/v2`
 - [ ] Proxy cutover completed with rollback option
 - [ ] Flask code removed after stability window
