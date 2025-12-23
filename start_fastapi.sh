@@ -1,0 +1,56 @@
+#!/bin/bash
+
+# FastAPI Server Startup Script
+# Runs alongside Flask on port 8001
+
+set -e
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
+
+echo -e "${GREEN}🚀 Starting FastAPI Server...${NC}"
+
+# Get the directory where the script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Activate virtual environment if it exists
+if [ -d "$SCRIPT_DIR/venv" ]; then
+    echo -e "${YELLOW}📦 Activating virtual environment...${NC}"
+    source "$SCRIPT_DIR/venv/bin/activate"
+elif [ -d "$SCRIPT_DIR/../venv" ]; then
+    echo -e "${YELLOW}📦 Activating virtual environment...${NC}"
+    source "$SCRIPT_DIR/../venv/bin/activate"
+fi
+
+# Set default port
+PORT=${FASTAPI_PORT:-8001}
+HOST=${FASTAPI_HOST:-0.0.0.0}
+
+# Check if port is already in use
+if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
+    echo -e "${RED}❌ Port $PORT is already in use${NC}"
+    echo -e "${YELLOW}To kill the process using port $PORT, run:${NC}"
+    echo "  lsof -ti :$PORT | xargs kill -9"
+    exit 1
+fi
+
+echo -e "${GREEN}📚 API Documentation will be available at:${NC}"
+echo -e "   Swagger UI: http://localhost:$PORT/docs"
+echo -e "   ReDoc:      http://localhost:$PORT/redoc"
+echo -e "   Health:     http://localhost:$PORT/api/v2/health"
+echo ""
+
+# Run uvicorn
+echo -e "${GREEN}▶️  Starting uvicorn on port $PORT...${NC}"
+cd "$SCRIPT_DIR"
+
+# Development mode with hot reload
+uvicorn src.fastapi_app.main:app \
+    --host $HOST \
+    --port $PORT \
+    --reload \
+    --reload-dir src/fastapi_app \
+    --log-level info

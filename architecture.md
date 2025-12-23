@@ -3,6 +3,8 @@
 ## Overview
 This document outlines the architecture for a backend service built with Python (using Flask) and APScheduler to handle the scheduling of cron jobs and trigger GitHub Actions.
 
+**Note (Migration):** FastAPI v2 is being introduced side-by-side. The migration plan and phase tracking live in `FASTAPI_MIGRATION_PLAN.md`, and the FastAPI code lives under `src/fastapi_app/` (served under `/api/v2/*`).
+
 ## Components
 
 ### 1. Framework
@@ -44,4 +46,3 @@ project-root/
 ## Conclusion
 
 This architecture provides a robust foundation for building your backend service. You can expand the endpoints and functionality as needed in the future.
-

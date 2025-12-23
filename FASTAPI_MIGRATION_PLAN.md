@@ -114,105 +114,149 @@ httpx
 
 ## Phase 1: Project Setup & Dual-Stack Infrastructure (Days 1-2)
 
-### Status: ⬜ Not Started
+### Status: ✅ Completed (2025-12-22)
 
 ### Objective
 Set up FastAPI alongside Flask with shared database and configuration.
 
 ### Tasks
 
-- [ ] Create folder structure `src/fastapi_app/`
-  - [ ] `main.py` - FastAPI app instance
-  - [ ] `config.py` - Pydantic Settings
-  - [ ] `dependencies/` - Auth, database dependencies
-  - [ ] `routers/` - Empty router files
-  - [ ] `schemas/` - Pydantic models
-- [ ] Update `requirements.txt` with FastAPI dependencies
-- [ ] Create reverse proxy configuration (nginx/Traefik)
+- [x] Create folder structure `src/fastapi_app/`
+  - [x] `main.py` - FastAPI app instance
+  - [x] `config.py` - Pydantic Settings
+  - [x] `dependencies/` - Auth, database dependencies
+  - [x] `routers/` - Empty router files
+  - [x] `schemas/` - Pydantic models
+- [x] Update `requirements.txt` with FastAPI dependencies
+- [ ] Create reverse proxy configuration (nginx/Traefik) *(Deferred - not needed for local development)*
   - [ ] `/api/v2/*` → FastAPI (port 8001)
   - [ ] `/api/*` → Flask (port 5000)
-- [ ] Add `start_fastapi.sh` script
-- [ ] Verify both apps run simultaneously
+- [x] Add `start_fastapi.sh` script
+- [x] Verify both apps run simultaneously
 
 ### Deliverables
-- [ ] FastAPI app responding on port 8001
-- [ ] Flask app responding on port 5000
-- [ ] Proxy routing under single port 8000
-- [ ] Shared `.env` configuration working
+- [x] FastAPI app responding on port 8001
+- [x] Flask app responding on port 5001 (macOS uses 5000 for AirPlay)
+- [ ] Proxy routing under single port 8000 *(Deferred)*
+- [x] Shared `.env` configuration working
 
 ### Notes
 ```
-<!-- Add implementation notes here -->
+Phase 1 completed on 2025-12-22.
+
+Files created:
+- src/fastapi_app/__init__.py
+- src/fastapi_app/main.py (FastAPI app with health endpoint)
+- src/fastapi_app/config.py (Pydantic Settings)
+- src/fastapi_app/dependencies/__init__.py
+- src/fastapi_app/dependencies/auth.py (placeholder)
+- src/fastapi_app/dependencies/database.py (placeholder)
+- src/fastapi_app/routers/__init__.py
+- src/fastapi_app/schemas/__init__.py (base schemas)
+- start_fastapi.sh (startup script)
+
+Endpoints available:
+- GET /api/v2/health - Health check
+- GET /docs - Swagger UI
+- GET /redoc - ReDoc documentation
+
+Both servers tested successfully:
+- Flask: http://localhost:5001/api/health
+- FastAPI: http://localhost:8001/api/v2/health
 ```
 
 ---
 
 ## Phase 2: Database & Model Layer (Days 3-5)
 
-### Status: ⬜ Not Started
+### Status: ✅ Completed (2025-12-22)
 
 ### Objective
 Create shared SQLAlchemy setup that works for both Flask and FastAPI.
 
 ### Tasks
 
-- [ ] Create `src/database/` folder
-  - [ ] `engine.py` - SQLAlchemy engine creation
-  - [ ] `session.py` - Sync and async session factories
-- [ ] Refactor models to use `DeclarativeBase` directly
-- [ ] Create Pydantic schemas in `src/fastapi_app/schemas/`
-  - [ ] `user.py` - UserCreate, UserUpdate, UserResponse
-  - [ ] `job.py` - JobCreate, JobUpdate, JobResponse
-  - [ ] `execution.py` - ExecutionResponse
-  - [ ] `notification.py` - NotificationResponse
-  - [ ] `category.py` - CategoryCreate, CategoryResponse
-  - [ ] `team.py` - TeamCreate, TeamResponse
-  - [ ] `settings.py` - SlackSettingsUpdate
-- [ ] Verify Flask app still works with models
-- [ ] Test database migrations
+- [x] Create `src/database/` folder
+  - [x] `engine.py` - SQLAlchemy engine creation (sync + async)
+  - [x] `session.py` - Sync and async session factories
+- [ ] Refactor models to use `DeclarativeBase` directly *(Deferred - Flask models work as-is)*
+- [x] Create Pydantic schemas in `src/fastapi_app/schemas/`
+  - [x] `user.py` - UserCreate, UserUpdate, UserResponse, UserLogin, PasswordChange, PasswordReset
+  - [x] `job.py` - JobCreate, JobUpdate, JobResponse, JobBulkUpload, JobTrigger
+  - [x] `execution.py` - ExecutionResponse, ExecutionStats, DashboardStats
+  - [x] `notification.py` - NotificationResponse, NotificationPreferences
+  - [x] `category.py` - CategoryCreate, CategoryUpdate, CategoryResponse
+  - [x] `team.py` - TeamCreate, TeamUpdate, TeamResponse
+  - [x] `settings.py` - SlackSettingsUpdate, UiPreferences
+  - [x] `common.py` - ErrorResponse, PaginatedResponse, BulkOperationResult
+- [x] Verify Flask app still works with models
+- [ ] Test database migrations *(Deferred - no schema changes required)*
 
 ### Pydantic Schemas Required
 
 | Schema File | Models |
 |-------------|--------|
-| `user.py` | UserCreate, UserUpdate, UserResponse, UserLogin |
-| `job.py` | JobCreate, JobUpdate, JobResponse, JobBulkUpload |
-| `execution.py` | ExecutionResponse, ExecutionStats |
-| `notification.py` | NotificationResponse, NotificationPrefs |
-| `category.py` | CategoryCreate, CategoryUpdate, CategoryResponse |
-| `team.py` | TeamCreate, TeamUpdate, TeamResponse |
-| `settings.py` | SlackSettingsUpdate, SlackSettingsResponse |
-| `common.py` | PaginatedResponse, ErrorResponse |
+| `user.py` | UserCreate, UserUpdate, UserResponse, UserLogin, PasswordChange, PasswordReset, TokenResponse, LoginResponse |
+| `job.py` | JobCreate, JobUpdate, JobResponse, JobBulkUpload, JobTrigger, JobTriggerResponse, JobStatsResponse |
+| `execution.py` | ExecutionResponse, ExecutionStats, ExecutionTimeline, DashboardStats, JobExecutionSummary |
+| `notification.py` | NotificationResponse, NotificationPreferencesResponse, NotificationMarkRead, NotificationCount |
+| `category.py` | CategoryCreate, CategoryUpdate, CategoryResponse, CategoryListResponse |
+| `team.py` | TeamCreate, TeamUpdate, TeamResponse, TeamListResponse |
+| `settings.py` | SlackSettingsUpdate, SlackSettingsResponse, UiPreferencesUpdate, UiPreferencesResponse, HealthResponse |
+| `common.py` | ErrorResponse, ErrorDetail, SuccessResponse, PaginationParams, PaginatedResponse, BulkOperationResult |
 
 ### Deliverables
-- [ ] Models compatible with both frameworks
-- [ ] ~25 Pydantic schemas created
-- [ ] Database operations working
+- [x] Models compatible with both frameworks (Flask uses existing, FastAPI uses Pydantic)
+- [x] ~50 Pydantic schemas created (exceeded target of ~25)
+- [x] Database session dependency ready for FastAPI
 
 ### Notes
 ```
-<!-- Add implementation notes here -->
+Phase 2 completed on 2025-12-22.
+
+Files created:
+- src/database/__init__.py
+- src/database/engine.py (sync + async engine factories)
+- src/database/session.py (sync + async session management)
+- src/fastapi_app/schemas/user.py (8 schemas)
+- src/fastapi_app/schemas/job.py (9 schemas)
+- src/fastapi_app/schemas/execution.py (9 schemas)
+- src/fastapi_app/schemas/notification.py (8 schemas)
+- src/fastapi_app/schemas/category.py (5 schemas)
+- src/fastapi_app/schemas/team.py (5 schemas)
+- src/fastapi_app/schemas/settings.py (8 schemas)
+- src/fastapi_app/schemas/common.py (12 schemas)
+- src/fastapi_app/schemas/__init__.py (exports all 64 schemas)
+
+Updated:
+- src/fastapi_app/dependencies/database.py (uses new session module)
+
+Verification:
+- Flask health check: http://localhost:5001/api/health ✅
+- FastAPI health check: http://localhost:8001/api/v2/health ✅
+- All schemas import successfully ✅
+- Database module imports successfully ✅
 ```
 
 ---
 
 ## Phase 3: Authentication System (Days 6-9)
 
-### Status: ⬜ Not Started
+### Status: ✅ Completed (2025-12-23)
 
 ### Objective
 Implement FastAPI authentication compatible with existing JWT tokens.
 
 ### Tasks
 
-- [ ] Create `src/fastapi_app/dependencies/auth.py`
-  - [ ] `get_current_user()` - Decode JWT, return User
-  - [ ] `get_current_active_user()` - Verify user is active
-  - [ ] `require_role(*roles)` - Role-based dependency factory
-  - [ ] `get_optional_user()` - For optional auth endpoints
-- [ ] Use same `JWT_SECRET_KEY` for token compatibility
-- [ ] Implement `/api/v2/auth/login` endpoint
-- [ ] Create token validation tests
+- [x] Create `src/fastapi_app/dependencies/auth.py`
+  - [x] `get_current_user()` - Decode JWT, return User
+  - [x] `get_current_active_user()` - Verify user is active
+  - [x] `require_role(*roles)` - Role-based dependency factory
+  - [x] `get_optional_user()` - For optional auth endpoints
+- [x] Use same `JWT_SECRET_KEY` for token compatibility
+- [x] Implement `/api/v2/auth/login` endpoint
+- [x] Create token validation tests
 
 ### Auth Dependencies to Create
 
@@ -226,20 +270,70 @@ async def get_optional_user(token: str = Depends(oauth2_scheme_optional)) -> Opt
 
 ### Cross-Stack Compatibility Tests
 
-- [ ] Token from Flask login → FastAPI endpoint ✓
-- [ ] Token from FastAPI login → Flask endpoint ✓
-- [ ] Token refresh works on both
-- [ ] Role claims preserved
+- [x] Token from Flask login → FastAPI endpoint ✓
+- [x] Token from FastAPI login → Flask endpoint ✓
+- [x] Token refresh works on both (refresh token required)
+- [x] Role claims preserved
 
 ### Deliverables
-- [ ] FastAPI auth dependencies complete
-- [ ] Single Sign-On across both stacks
-- [ ] Auth integration tests passing
+- [x] FastAPI auth dependencies complete
+- [x] Single Sign-On across both stacks
+- [x] Auth integration tests passing (28 tests)
 
 ### Notes
 ```
-<!-- Add implementation notes here -->
+Phase 3 completed on 2025-12-23.
+
+Files created/updated:
+- src/fastapi_app/dependencies/auth.py (394 lines)
+  - Token creation (create_access_token, create_refresh_token)
+  - Token decoding/verification (decode_token)
+  - Auth dependencies (get_current_user, get_current_active_user, get_optional_user)
+  - Role-based dependencies (require_role, require_admin, require_user_or_admin)
+
+- src/fastapi_app/routers/auth.py (406 lines)
+  - POST /api/v2/auth/login - Username/email login
+  - POST /api/v2/auth/login/form - OAuth2 form login
+  - POST /api/v2/auth/refresh - Token refresh
+  - GET /api/v2/auth/me - Current user info
+  - POST /api/v2/auth/register - User registration (admin only)
+  - POST /api/v2/auth/logout - Logout endpoint
+  - GET /api/v2/auth/verify - Token verification
+
+- `tests_fastapi/auth/` (28 tests ✅)
+  - Login, token refresh, user registration tests
+  - Role-based access control tests
+  - Cross-stack JWT compatibility (Flask ↔ FastAPI)
+
+- `tests_fastapi/core/` + `tests_fastapi/database/` (3 tests ✅)
+  - Phase 1 health/OpenAPI smoke tests
+  - Phase 2 async session/model compatibility test
+
+Cross-stack SSO verified:
+- Flask JWT tokens → FastAPI ✅
+- FastAPI JWT tokens → Flask ✅
 ```
+
+### Database Separation (Added 2025-12-23)
+
+To prevent Flask's background scheduler from interfering with FastAPI tests, FastAPI supports **separate database configuration**, with safe defaults:
+
+- **Default (development/production)**: FastAPI shares the same database as Flask (`DATABASE_URL` / `src/instance/cron_jobs.db`) to keep users/auth in sync.
+- **FastAPI Test Database (default when `TESTING=true`)**: `src/instance/fastapi_test.db`
+- **Optional migration DB**: set `FASTAPI_DATABASE_URL` (e.g. `sqlite:///src/instance/fastapi_cron_jobs.db`) to run FastAPI against a separate database.
+
+**Benefits**:
+- ✅ No test freezing/hanging issues
+- ✅ Clean isolation between stacks
+- ✅ Safe independent development
+- ✅ Easy rollback if needed
+
+**Initialize databases**:
+```bash
+python scripts/init_fastapi_db.py
+```
+
+See [DATABASE_SEPARATION.md](DATABASE_SEPARATION.md) for details.
 
 ---
 
@@ -1344,13 +1438,13 @@ Job 2,0 6 * * 1,reports,analytics,2025-12-31,myorg,repo2,report.yml,enable
 
 | Test Case | Expected Result | Status |
 |-----------|-----------------|--------|
-| Login via Flask → Use token on FastAPI | Token accepted, user data returned | ⬜ |
-| Login via FastAPI → Use token on Flask | Token accepted, user data returned | ⬜ |
-| Expired token on FastAPI | 401 Unauthorized | ⬜ |
-| Invalid token on FastAPI | 401 Unauthorized | ⬜ |
-| Admin token → Admin-only endpoint | Access granted | ⬜ |
-| User token → Admin-only endpoint | 403 Forbidden | ⬜ |
-| Viewer token → Write endpoint | 403 Forbidden | ⬜ |
+| Login via Flask → Use token on FastAPI | Token accepted, user data returned | ✅ |
+| Login via FastAPI → Use token on Flask | Token accepted, user data returned | ✅ |
+| Expired token on FastAPI | 401 Unauthorized | ✅ |
+| Invalid token on FastAPI | 401 Unauthorized | ✅ |
+| Admin token → Admin-only endpoint | Access granted | ✅ |
+| User token → Admin-only endpoint | 403 Forbidden | ✅ |
+| Viewer token → Write endpoint | 403 Forbidden | ✅ |
 
 ### Phase 4: Response Parity Tests
 
