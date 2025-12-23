@@ -92,9 +92,9 @@ This document outlines the gradual migration strategy from Flask to FastAPI for 
 |---------------|-------------------|-------|
 | `Flask` | `fastapi` + `uvicorn` | Native async support |
 | `Flask-SQLAlchemy` | `SQLAlchemy 2.0` + async sessions | Use dependency injection |
-| `Flask-JWT-Extended` | `python-jose` + `passlib` | Custom dependencies |
+| `Flask-JWT-Extended` | `PyJWT` + existing `passlib` hashing | Keep JWT + password behavior compatible across stacks |
 | `Flask-CORS` | `fastapi.middleware.cors` | Built-in |
-| `Flask-Mail` | `fastapi-mail` | Similar API |
+| `Flask-Mail` | TBD (Phase 7) | Keep Flask-Mail until notifications/settings migrate |
 | `APScheduler` | `APScheduler` | Keep as-is |
 
 ### New Requirements (to add)
@@ -102,12 +102,13 @@ This document outlines the gradual migration strategy from Flask to FastAPI for 
 ```txt
 fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
-python-jose[cryptography]
+PyJWT[crypto]>=2.8.0
 python-multipart
-fastapi-mail
 pydantic>=2.0
 pydantic-settings
 httpx
+aiosqlite
+greenlet
 ```
 
 ---
@@ -278,7 +279,7 @@ async def get_optional_user(token: str = Depends(oauth2_scheme_optional)) -> Opt
 ### Deliverables
 - [x] FastAPI auth dependencies complete
 - [x] Single Sign-On across both stacks
-- [x] Auth integration tests passing (28 tests)
+- [x] FastAPI tests passing (`tests_fastapi/`, 31 tests)
 
 ### Notes
 ```
@@ -339,38 +340,55 @@ See [DATABASE_SEPARATION.md](DATABASE_SEPARATION.md) for details.
 
 ## Phase 4: Health & Read-Only Endpoints (Days 10-12)
 
-### Status: ⬜ Not Started
+### Status: 🟨 In Progress (4A ✅, 4B ✅, 4C ✅)
 
 ### Objective
 Migrate low-risk, read-only endpoints first for validation.
 
-### Endpoints to Migrate
+### Split (Approved)
 
-| # | Flask Endpoint | FastAPI Endpoint | Auth | Status |
-|---|----------------|------------------|------|--------|
-| 1 | `GET /health` | `GET /api/v2/health` | None | ⬜ |
-| 2 | `GET /api/jobs` | `GET /api/v2/jobs` | JWT | ⬜ |
-| 3 | `GET /api/jobs/<id>` | `GET /api/v2/jobs/{id}` | JWT | ⬜ |
-| 4 | `GET /api/jobs/<id>/executions` | `GET /api/v2/jobs/{id}/executions` | JWT | ⬜ |
-| 5 | `GET /api/executions` | `GET /api/v2/executions` | JWT | ⬜ |
-| 6 | `GET /api/executions/<id>` | `GET /api/v2/executions/{id}` | JWT | ⬜ |
-| 7 | `GET /api/stats/executions` | `GET /api/v2/stats/executions` | JWT | ⬜ |
-| 8 | `GET /api/categories` | `GET /api/v2/categories` | JWT | ⬜ |
-| 9 | `GET /api/teams` | `GET /api/v2/teams` | JWT | ⬜ |
+- **Phase 4A: Core & Docs (Done)**
+  - [x] `GET /api/health` → `GET /api/v2/health` (no auth)
+  - [x] OpenAPI available at `GET /api/v2/openapi.json`, Swagger UI at `GET /docs`
+
+- **Phase 4B: Jobs (Read) (Done)**
+  - [x] `GET /api/jobs` → `GET /api/v2/jobs` (JWT)
+  - [x] `GET /api/jobs/<id>` → `GET /api/v2/jobs/{id}` (JWT)
+  - [x] Response parity: returns `{count, jobs}` and `{job}` with `last_execution_at` + `next_execution_at`
+
+- **Phase 4C: Job Executions (Read)**
+  - [x] `GET /api/jobs/<id>/executions` → `GET /api/v2/jobs/{id}/executions` (JWT)
+  - [x] `GET /api/jobs/<id>/executions/<execution_id>` → `GET /api/v2/jobs/{id}/executions/{execution_id}` (JWT)
+  - [x] `GET /api/jobs/<id>/executions/stats` → `GET /api/v2/jobs/{id}/executions/stats` (JWT)
+
+- **Phase 4D: Executions (Read)**
+  - [ ] `GET /api/executions` → `GET /api/v2/executions` (JWT)
+  - [ ] `GET /api/executions/<execution_id>` → `GET /api/v2/executions/{execution_id}` (JWT)
+  - [ ] `GET /api/executions/statistics` → `GET /api/v2/executions/statistics` (JWT)
+
+- **Phase 4E: Taxonomy (Read)**
+  - [ ] `GET /api/job-categories` → `GET /api/v2/job-categories` (JWT)
+  - [ ] `GET /api/pic-teams` → `GET /api/v2/pic-teams` (JWT)
 
 ### Tasks
 
-- [ ] Create `src/fastapi_app/routers/jobs.py`
-- [ ] Create `src/fastapi_app/routers/executions.py`
-- [ ] Create `src/fastapi_app/routers/categories.py`
-- [ ] Implement pagination with Pydantic
-- [ ] Implement filtering and sorting
-- [ ] Add response models
-- [ ] Verify OpenAPI docs at `/api/v2/docs`
-- [ ] Run parity tests (Flask vs FastAPI responses)
+- [ ] Implement routers per group (recommended):
+  - [x] `src/fastapi_app/routers/jobs.py` (Phase 4B)
+  - [x] `src/fastapi_app/routers/executions.py` (Phase 4C/4D)
+  - [ ] `src/fastapi_app/routers/taxonomy.py` (Phase 4E: job-categories + pic-teams)
+- [ ] Add Pydantic response models (reuse `src/fastapi_app/schemas/*`)
+- [ ] Add pagination/filter/sort where present in Flask
+- [ ] Add parity tests (Flask vs FastAPI responses) + auth enforcement tests
+- [ ] Keep tests split by service under `tests_fastapi/` (e.g. `tests_fastapi/jobs/`, `tests_fastapi/executions/`, `tests_fastapi/taxonomy/`)
+
+Phase 4B tests:
+- [x] `tests_fastapi/jobs/test_jobs_read.py`
+
+Phase 4C tests:
+- [x] `tests_fastapi/executions/test_job_executions_read.py`
 
 ### Deliverables
-- [ ] 9 read-only endpoints on `/api/v2/`
+- [ ] Phase 4B–4E endpoints on `/api/v2/`
 - [ ] OpenAPI documentation
 - [ ] Response parity validated
 
@@ -397,9 +415,9 @@ Migrate job creation, update, and deletion with full validation.
 | 3 | `DELETE /api/jobs/<id>` | `DELETE /api/v2/jobs/{id}` | Medium | ⬜ |
 | 4 | `POST /api/jobs/<id>/execute` | `POST /api/v2/jobs/{id}/execute` | High | ⬜ |
 | 5 | `POST /api/jobs/bulk-upload` | `POST /api/v2/jobs/bulk-upload` | High | ⬜ |
-| 6 | `POST /api/cron/validate` | `POST /api/v2/cron/validate` | Low | ⬜ |
-| 7 | `POST /api/cron/next-runs` | `POST /api/v2/cron/next-runs` | Low | ⬜ |
-| 8 | `POST /api/cron/test-run` | `POST /api/v2/cron/test-run` | Medium | ⬜ |
+| 6 | `POST /api/jobs/validate-cron` | `POST /api/v2/jobs/validate-cron` | Low | ⬜ |
+| 7 | `POST /api/jobs/cron-preview` | `POST /api/v2/jobs/cron-preview` | Low | ⬜ |
+| 8 | `POST /api/jobs/test-run` | `POST /api/v2/jobs/test-run` | Medium | ⬜ |
 
 ### Tasks
 
@@ -432,34 +450,34 @@ Migrate job creation, update, and deletion with full validation.
 
 ## Phase 6: Auth & User Management (Days 18-21)
 
-### Status: ⬜ Not Started
+### Status: 🟨 Partially Complete (core auth ✅, user management pending)
 
 ### Objective
-Migrate authentication and user management endpoints.
+Complete user management + preference endpoints that are not covered by Phase 3.
 
 ### Endpoints to Migrate
 
 | # | Flask Endpoint | FastAPI Endpoint | Auth | Status |
 |---|----------------|------------------|------|--------|
-| 1 | `POST /api/auth/login` | `POST /api/v2/auth/login` | None | ⬜ |
-| 2 | `POST /api/auth/refresh` | `POST /api/v2/auth/refresh` | Refresh | ⬜ |
-| 3 | `POST /api/auth/register` | `POST /api/v2/auth/register` | Admin | ⬜ |
-| 4 | `GET /api/auth/me` | `GET /api/v2/auth/me` | JWT | ⬜ |
+| 1 | `POST /api/auth/login` | `POST /api/v2/auth/login` | None | ✅ |
+| 2 | `POST /api/auth/refresh` | `POST /api/v2/auth/refresh` | Refresh | ✅ |
+| 3 | `POST /api/auth/register` | `POST /api/v2/auth/register` | Admin | ✅ |
+| 4 | `GET /api/auth/me` | `GET /api/v2/auth/me` | JWT | ✅ |
 | 5 | `GET /api/auth/users` | `GET /api/v2/auth/users` | Admin | ⬜ |
 | 6 | `GET /api/auth/users/<id>` | `GET /api/v2/auth/users/{id}` | JWT | ⬜ |
 | 7 | `PUT /api/auth/users/<id>` | `PUT /api/v2/auth/users/{id}` | JWT | ⬜ |
 | 8 | `DELETE /api/auth/users/<id>` | `DELETE /api/v2/auth/users/{id}` | Admin | ⬜ |
-| 9 | `GET .../preferences` | `GET .../preferences` | JWT | ⬜ |
-| 10 | `PUT .../preferences` | `PUT .../preferences` | JWT | ⬜ |
-| 11 | `GET .../ui-preferences` | `GET .../ui-preferences` | JWT | ⬜ |
-| 12 | `PUT .../ui-preferences` | `PUT .../ui-preferences` | JWT | ⬜ |
+| 9 | `GET /api/auth/users/<id>/preferences` | `GET /api/v2/auth/users/{id}/preferences` | JWT | ⬜ |
+| 10 | `PUT /api/auth/users/<id>/preferences` | `PUT /api/v2/auth/users/{id}/preferences` | JWT | ⬜ |
+| 11 | `GET /api/auth/users/<id>/ui-preferences` | `GET /api/v2/auth/users/{id}/ui-preferences` | JWT | ⬜ |
+| 12 | `PUT /api/auth/users/<id>/ui-preferences` | `PUT /api/v2/auth/users/{id}/ui-preferences` | JWT | ⬜ |
 
 ### Tasks
 
-- [ ] Create `src/fastapi_app/routers/auth.py`
-- [ ] Implement OAuth2PasswordBearer flow
-- [ ] Use same password hashing (passlib pbkdf2_sha256)
-- [ ] Add preference endpoints
+- [x] `src/fastapi_app/routers/auth.py` (login/refresh/register/me/logout/verify)
+- [x] Password hashing remains `passlib.hash.pbkdf2_sha256` via `src/models/user.py`
+- [ ] Add user management endpoints (`/users`, `/users/{id}`)
+- [ ] Add preference endpoints (`/users/{id}/preferences`, `/users/{id}/ui-preferences`)
 - [ ] Implement user self-update restrictions
 - [ ] Add admin-only protections
 
@@ -495,12 +513,12 @@ Complete remaining endpoints and utilities.
 | 6 | `DELETE /api/notifications/read` | `DELETE /api/v2/notifications/read` | ⬜ |
 | 7 | `GET /api/settings/slack` | `GET /api/v2/settings/slack` | ⬜ |
 | 8 | `PUT /api/settings/slack` | `PUT /api/v2/settings/slack` | ⬜ |
-| 9 | `POST /api/categories` | `POST /api/v2/categories` | ⬜ |
-| 10 | `PUT /api/categories/<id>` | `PUT /api/v2/categories/{id}` | ⬜ |
-| 11 | `DELETE /api/categories/<id>` | `DELETE /api/v2/categories/{id}` | ⬜ |
-| 12 | `POST /api/teams` | `POST /api/v2/teams` | ⬜ |
-| 13 | `PUT /api/teams/<id>` | `PUT /api/v2/teams/{id}` | ⬜ |
-| 14 | `DELETE /api/teams/<id>` | `DELETE /api/v2/teams/{id}` | ⬜ |
+| 9 | `POST /api/job-categories` | `POST /api/v2/job-categories` | ⬜ |
+| 10 | `PUT /api/job-categories/<id>` | `PUT /api/v2/job-categories/{id}` | ⬜ |
+| 11 | `DELETE /api/job-categories/<id>` | `DELETE /api/v2/job-categories/{id}` | ⬜ |
+| 12 | `POST /api/pic-teams` | `POST /api/v2/pic-teams` | ⬜ |
+| 13 | `PUT /api/pic-teams/<id>` | `PUT /api/v2/pic-teams/{id}` | ⬜ |
+| 14 | `DELETE /api/pic-teams/<id>` | `DELETE /api/v2/pic-teams/{id}` | ⬜ |
 
 ### Tasks
 
@@ -509,7 +527,7 @@ Complete remaining endpoints and utilities.
 - [ ] Implement pagination for notifications
 - [ ] Port utility functions to async:
   - [ ] `notifications.py` → async broadcast
-  - [ ] `email.py` → fastapi-mail
+  - [ ] `email.py` → TBD (keep Flask-Mail until migrated)
   - [ ] `slack.py` → httpx async client
 
 ### Deliverables
@@ -728,8 +746,8 @@ src/
 ### Prerequisites
 
 ```bash
-# Python 3.11+ required
-python --version  # Should be 3.11+
+# Python 3.9+ required
+python --version  # Should be 3.9+
 
 # Create virtual environment (if not exists)
 python -m venv venv
@@ -739,35 +757,32 @@ source venv/bin/activate  # macOS/Linux
 ### Step 1: Install Dependencies
 
 ```bash
-# Install existing Flask dependencies
+# Install Flask + FastAPI dependencies
 pip install -r requirements.txt
-
-# Install FastAPI dependencies (add to requirements.txt first)
-pip install fastapi uvicorn[standard] python-jose[cryptography] python-multipart fastapi-mail pydantic pydantic-settings httpx
 ```
 
 ### Step 2: Run Dual-Stack Locally
 
-**Terminal 1 - Flask (Port 5000):**
+**Terminal 1 - Flask (Port 5001):**
 ```bash
 cd /path/to/cron-job-backend
 source venv/bin/activate
 ./start_server.sh
-# Or: python -m flask run --port 5000
 ```
 
 **Terminal 2 - FastAPI (Port 8001):**
 ```bash
 cd /path/to/cron-job-backend
 source venv/bin/activate
-uvicorn src.fastapi_app.main:app --reload --port 8001
+./start_fastapi.sh
+# Or: uvicorn src.fastapi_app.main:app --reload --port 8001
 ```
 
 ### Step 3: Verify Both Running
 
 ```bash
 # Flask health check
-curl http://localhost:5000/api/health
+curl http://localhost:5001/api/health
 
 # FastAPI health check
 curl http://localhost:8001/api/v2/health
@@ -782,7 +797,7 @@ For unified access on port 8000, create `nginx.conf`:
 
 ```nginx
 upstream flask {
-    server 127.0.0.1:5000;
+    server 127.0.0.1:5001;
 }
 
 upstream fastapi {
@@ -959,21 +974,16 @@ server {
 
 #### GET `/api/v2/jobs`
 
-**Query Parameters:**
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `page` | int | 1 | Page number |
-| `per_page` | int | 20 | Items per page (max: 100) |
-| `category` | string | - | Filter by category slug |
-| `pic_team` | string | - | Filter by team slug |
-| `is_active` | bool | - | Filter by active status |
-| `search` | string | - | Search in job name |
-| `sort_by` | string | `created_at` | Sort field |
-| `sort_order` | string | `desc` | `asc` or `desc` |
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Notes (Phase 4B):**
+- This endpoint intentionally matches Flask v1 response shape for parity testing.
+- Pagination/filter/sort query parameters are deferred until Phase 4 stabilization is complete.
 
 **Response (200):**
 ```json
 {
+  "count": 1,
   "jobs": [
     {
       "id": "550e8400-e29b-41d4-a716-446655440000",
@@ -994,13 +1004,134 @@ server {
       "is_active": true,
       "created_at": "2025-01-15T10:30:00Z",
       "updated_at": "2025-01-15T10:30:00Z",
+      "last_execution_at": "2025-01-15T12:00:00Z",
       "next_execution_at": "2025-12-23T02:00:00+09:00"
     }
-  ],
-  "total": 45,
-  "page": 1,
-  "per_page": 20,
-  "total_pages": 3
+  ]
+}
+```
+
+#### GET `/api/v2/jobs/{id}`
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Response (200):**
+```json
+{
+  "job": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Daily Backup Job",
+    "cron_expression": "0 2 * * *",
+    "target_url": null,
+    "github_owner": "myorg",
+    "github_repo": "myrepo",
+    "github_workflow_name": "backup.yml",
+    "metadata": {"env": "production"},
+    "category": "maintenance",
+    "pic_team": "devops",
+    "end_date": "2025-12-31",
+    "enable_email_notifications": true,
+    "notification_emails": ["admin@example.com"],
+    "notify_on_success": false,
+    "created_by": "user-uuid",
+    "is_active": true,
+    "created_at": "2025-01-15T10:30:00Z",
+    "updated_at": "2025-01-15T10:30:00Z",
+    "last_execution_at": "2025-01-15T12:00:00Z",
+    "next_execution_at": "2025-12-23T02:00:00+09:00"
+  }
+}
+```
+
+### Job Execution Endpoints
+
+#### GET `/api/v2/jobs/{id}/executions`
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Query Parameters (optional):**
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `limit` | int | 50 | Max executions (max: 200) |
+| `status` | string | - | `success|failed|running` (or comma-separated list) |
+| `trigger_type` | string | - | `scheduled|manual` |
+| `from` | string | - | ISO date/datetime (inclusive, UTC) |
+| `to` | string | - | ISO date/datetime (exclusive, UTC). Date-only treated as inclusive day |
+
+**Response (200):**
+```json
+{
+  "job_id": "job-uuid",
+  "job_name": "Daily Backup Job",
+  "total_executions": 2,
+  "executions": [
+    {
+      "id": "exec-uuid",
+      "job_id": "job-uuid",
+      "status": "success",
+      "trigger_type": "manual",
+      "started_at": "2025-01-15T12:00:00Z",
+      "completed_at": "2025-01-15T12:00:10Z",
+      "duration_seconds": 10.0,
+      "execution_type": "github_actions",
+      "target": "owner/repo/actions/workflows/backup.yml",
+      "response_status": 204,
+      "error_message": null,
+      "output": null
+    }
+  ]
+}
+```
+
+#### GET `/api/v2/jobs/{id}/executions/{execution_id}`
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Response (200):**
+```json
+{
+  "job": { "id": "job-uuid", "name": "Daily Backup Job" },
+  "execution": {
+    "id": "exec-uuid",
+    "job_id": "job-uuid",
+    "status": "failed",
+    "trigger_type": "scheduled",
+    "started_at": "2025-01-15T12:00:00Z",
+    "completed_at": "2025-01-15T12:00:10Z",
+    "duration_seconds": 10.0,
+    "execution_type": "webhook",
+    "target": "https://api.example.com/webhook",
+    "response_status": 500,
+    "error_message": "Request failed",
+    "output": null
+  }
+}
+```
+
+#### GET `/api/v2/jobs/{id}/executions/stats`
+
+**Headers:** `Authorization: Bearer <access_token>`
+
+**Response (200):**
+```json
+{
+  "job_id": "job-uuid",
+  "job_name": "Daily Backup Job",
+  "statistics": {
+    "total_executions": 10,
+    "success_count": 8,
+    "failed_count": 2,
+    "running_count": 0,
+    "success_rate": 80.0,
+    "average_duration_seconds": 12.34
+  },
+  "latest_execution": {
+    "id": "exec-uuid",
+    "job_id": "job-uuid",
+    "status": "success",
+    "trigger_type": "manual",
+    "started_at": "2025-01-15T12:00:00Z"
+  }
 }
 ```
 
@@ -1434,6 +1565,19 @@ Job 2,0 6 * * 1,reports,analytics,2025-12-31,myorg,repo2,report.yml,enable
 
 ## Testing Checklist
 
+### Phases 1–3: Automated FastAPI Test Coverage
+
+| Phase | Area | Tests | Status |
+|------:|------|-------|--------|
+| 1 | App bootstrap + health + OpenAPI smoke | `tests_fastapi/core/test_health.py` | ✅ |
+| 2 | Async DB session + model compatibility | `tests_fastapi/database/test_async_session.py` | ✅ |
+| 3 | Auth flows + cross-stack JWT | `tests_fastapi/auth/*` | ✅ |
+
+Run the FastAPI-only suite:
+```bash
+venv/bin/python -m pytest -q tests_fastapi
+```
+
 ### Phase 3: Cross-Stack Token Compatibility
 
 | Test Case | Expected Result | Status |
@@ -1452,7 +1596,7 @@ For each read-only endpoint, compare Flask and FastAPI responses:
 
 ```bash
 # Example parity test script
-flask_response=$(curl -s http://localhost:5000/api/jobs -H "Authorization: Bearer $TOKEN")
+flask_response=$(curl -s http://localhost:5001/api/jobs -H "Authorization: Bearer $TOKEN")
 fastapi_response=$(curl -s http://localhost:8001/api/v2/jobs -H "Authorization: Bearer $TOKEN")
 
 # Compare (ignoring order, timestamps may differ slightly)
@@ -1465,12 +1609,13 @@ diff <(echo "$flask_response" | jq -S '.jobs | sort_by(.id)') \
 | GET /jobs | ⬜ | Check pagination, filters |
 | GET /jobs/{id} | ⬜ | |
 | GET /jobs/{id}/executions | ⬜ | |
-| GET /executions | ⬜ | |
-| GET /executions/{id} | ⬜ | |
+| GET /jobs/{id}/executions/{execution_id} | ⬜ | |
+| GET /jobs/{id}/executions/stats | ⬜ | |
+| GET /executions | ⬜ | Check pagination, filters |
+| GET /executions/{execution_id} | ⬜ | |
 | GET /executions/statistics | ⬜ | |
 | GET /job-categories | ⬜ | |
 | GET /pic-teams | ⬜ | |
-| GET /notifications | ⬜ | |
 
 ### Phase 5: Write Operation Tests
 
@@ -1677,15 +1822,17 @@ async def get_job(job_id: str, db: AsyncSession = Depends(get_db)):
 During dual-stack operation, both Flask and FastAPI access the same SQLite file:
 
 1. **SQLite Limitations:** SQLite has limited concurrent write support
-2. **Mitigation:** Use `check_same_thread=False` and connection pooling
+2. **Mitigation:** Use `check_same_thread=False`; for async SQLite, prefer `NullPool` to avoid thread/connection reuse issues
 3. **Production:** Migrate to MySQL/PostgreSQL before heavy load
 
 ```python
 # For SQLite during migration
+from sqlalchemy.pool import NullPool
+
 engine = create_async_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False},
-    pool_pre_ping=True,
+    poolclass=NullPool,
 )
 ```
 
@@ -1696,11 +1843,11 @@ engine = create_async_engine(
 - [FastAPI Documentation](https://fastapi.tiangolo.com/)
 - [SQLAlchemy 2.0 Async](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html)
 - [Pydantic V2](https://docs.pydantic.dev/latest/)
-- [python-jose](https://github.com/mpdavis/python-jose)
-- [fastapi-mail](https://sabuhish.github.io/fastapi-mail/)
+- [PyJWT](https://pyjwt.readthedocs.io/)
+- [passlib](https://passlib.readthedocs.io/)
 - [APScheduler with FastAPI](https://apscheduler.readthedocs.io/)
 - [aiosqlite](https://aiosqlite.omnilib.dev/)
 
 ---
 
-*Last Updated: December 22, 2025*
+*Last Updated: December 23, 2025*

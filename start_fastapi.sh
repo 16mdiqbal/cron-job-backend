@@ -52,5 +52,5 @@ uvicorn src.fastapi_app.main:app \
     --host $HOST \
     --port $PORT \
     --reload \
-    --reload-dir src/fastapi_app \
+    --reload-dir src \
     --log-level info

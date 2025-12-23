@@ -11,6 +11,13 @@ This document outlines the architecture for a backend service built with Python 
 - **Flask**: A lightweight web framework for building RESTful APIs.
 - **APScheduler**: A Python library to manage scheduled jobs.
 
+### 1.1 FastAPI (Migration, Side-by-Side)
+- **FastAPI v2** runs alongside Flask and serves new endpoints under **`/api/v2/*`**.
+- **Entry point**: `src/fastapi_app/main.py` (registers routers, exposes `GET /api/v2/health`).
+- **Config**: `src/fastapi_app/config.py` (Pydantic settings; shares env vars with Flask during migration).
+- **Shared DB utilities**: `src/database/engine.py` + `src/database/session.py` (sync for Flask, async for FastAPI).
+- **FastAPI tests** live in `tests_fastapi/` to avoid importing Flask’s `test/conftest.py` and scheduler side-effects.
+
 ### 2. Project Structure
 project-root/
 │

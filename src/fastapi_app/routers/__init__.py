@@ -13,7 +13,11 @@ Routers are migrated incrementally from Flask.
 """
 
 from .auth import router as auth_router
+from .jobs import router as jobs_router
+from .executions import router as executions_router
 
 __all__ = [
     "auth_router",
+    "jobs_router",
+    "executions_router",
 ]
