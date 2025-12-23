@@ -606,7 +606,7 @@ venv/bin/python -m pytest -q tests_fastapi
 
 ## Phase 6: Auth & User Management (Days 18-21)
 
-### Status: 🟨 Partially Complete (core auth ✅, user management pending)
+### Status: ✅ Complete (6A–6E)
 
 ### Objective
 Complete user management + preference endpoints that are not covered by Phase 3.
@@ -647,55 +647,76 @@ Complete user management + preference endpoints that are not covered by Phase 3.
 - [x] Implement Phase 6C: user delete endpoint + tests
 - [x] Implement Phase 6D: notification preferences endpoints + tests
 - [x] Implement Phase 6E: UI preferences endpoints + tests
-- [ ] Ensure response shapes match Flask where feasible (`error` + `message` keys, and payload nesting like `user`, `preferences`)
+- [x] Ensure response shapes match Flask where feasible (`error` + `message` keys, and payload nesting like `user`, `preferences`)
 
 ### Deliverables
 - [x] Full auth flow on FastAPI (login/refresh/register/me/logout/verify)
-- [ ] User management CRUD (list/get/update/delete)
-- [ ] Preference management (notification + UI)
-- [ ] Password change working (self and admin)
+- [x] User management CRUD (list/get/update/delete)
+- [x] Preference management (notification + UI)
+- [x] Password change working (self and admin)
 
 ### Notes
-Planned implementation + parity requirements (before coding):
+Implementation location:
+- `src/fastapi_app/routers/auth.py` (all Phase 6 endpoints under `/api/v2/auth/*`)
+- Models: `src/models/user.py`, `src/models/notification_preferences.py`, `src/models/ui_preferences.py`
+- Tests: `tests_fastapi/users/*`
 
 #### 6A — Users read
-- `GET /api/v2/auth/users` (admin-only): match Flask response shape: `{"count": N, "users": [...]}`.
-- `GET /api/v2/auth/users/{id}` (JWT): admin can view any; non-admin can view only self; match Flask: `{"user": {...}}`.
+- `GET /api/v2/auth/users` (admin-only)
+  - Response: `{"count": N, "users": [User.to_dict(), ...]}`
+- `GET /api/v2/auth/users/{id}` (JWT)
+  - RBAC: admin can view any user; non-admin can view only self
+  - Response: `{"user": User.to_dict()}`
+  - Forbidden response matches Flask: `{"error": "Forbidden. You can only view your own profile."}`
+- Tests: `tests_fastapi/users/test_users_read.py`
 
 #### 6B — User update
-- `PUT /api/v2/auth/users/{id}`:
-  - Self-update: email + password only
-  - Admin update: email + password + role + is_active
-  - Validate: unique email (409), password length ≥ 6, role in {admin,user,viewer}
-  - Match Flask response shape: `{"message":"User updated successfully","updated_fields":[...],"user":{...}}`
+- `PUT /api/v2/auth/users/{id}` (JWT)
+  - RBAC:
+    - Self-update: `email`, `password`
+    - Admin-update: `email`, `password`, `role`, `is_active`
+  - Validations:
+    - `email` unique → 409 `{"error":"Email already exists"}`
+    - `password` length ≥ 6 → 400
+    - `role` ∈ {admin,user,viewer} → 400 with `{"error":"Invalid role","message":"Role must be one of: admin, user, viewer"}`
+    - Reject empty/no-op updates → 400 `{"error":"No valid fields to update"}`
+  - Response: `{"message":"User updated successfully","updated_fields":[...],"user": User.to_dict()}`
+- Tests: `tests_fastapi/users/test_users_update.py`
 
 #### 6C — User delete
-- `DELETE /api/v2/auth/users/{id}` (admin-only):
-  - Guard: cannot delete yourself (400)
-  - Match Flask response shape: `{"message":"User deleted successfully","deleted_user":{"id":"...","username":"..."}}`
+- `DELETE /api/v2/auth/users/{id}` (admin-only)
+  - Guard: cannot delete yourself → 400 `{"error":"Cannot delete your own account"}`
+  - Response: `{"message":"User deleted successfully","deleted_user":{"id":"...","username":"..."}}`
+- Tests: `tests_fastapi/users/test_users_delete.py`
 
 #### 6D — Notification preferences
-- `GET /api/v2/auth/users/{id}/preferences`:
-  - Admin can access any; non-admin only self (403 on others)
-  - Get-or-create behavior with Flask defaults
-  - Match Flask response shape: `{"message":"Notification preferences retrieved successfully","preferences":{...}}`
-- `PUT /api/v2/auth/users/{id}/preferences`:
-  - Partial update allowed (fields optional); defaults preserved for omitted keys
-  - Match Flask response shape: `{"message":"Notification preferences updated successfully","preferences":{...}}`
+- `GET /api/v2/auth/users/{id}/preferences` (JWT)
+  - RBAC: admin can access any; non-admin only self
+  - Get-or-create defaults match Flask (on first GET):
+    - `email_on_job_success=True`, `email_on_job_failure=True`, `email_on_job_disabled=False`
+    - `browser_notifications=False`, `daily_digest=False`, `weekly_report=False`
+  - Response: `{"message":"Notification preferences retrieved successfully","preferences": {...}}`
+- `PUT /api/v2/auth/users/{id}/preferences` (JWT)
+  - RBAC: admin any; non-admin only self
+  - Partial update allowed; missing row is created if needed (matches Flask)
+  - Response: `{"message":"Notification preferences updated successfully","preferences": {...}}`
+- Tests: `tests_fastapi/users/test_notification_preferences.py`
 
 #### 6E — UI preferences
-- `GET /api/v2/auth/users/{id}/ui-preferences`:
-  - Admin can access any; non-admin only self
-  - Get-or-create behavior
-  - Match Flask response shape: `{"preferences":{"jobs_table_columns":{...}}}`
-- `PUT /api/v2/auth/users/{id}/ui-preferences`:
-  - Require `jobs_table_columns` object
-  - Normalize to allowed column keys (match Flask default keys + boolean values)
-  - Match Flask response shape: `{"preferences":{"jobs_table_columns":{...}}}`
+- `GET /api/v2/auth/users/{id}/ui-preferences` (JWT)
+  - RBAC: admin can access any; non-admin only self
+  - Get-or-create defaults match Flask, returning:
+    - `{"preferences":{"jobs_table_columns":{...}}}`
+- `PUT /api/v2/auth/users/{id}/ui-preferences` (JWT)
+  - RBAC: admin any; non-admin only self
+  - Requires `jobs_table_columns` object; normalizes to allowed keys (Flask default keys)
+  - Response: `{"preferences":{"jobs_table_columns":{...}}}`
+- Tests: `tests_fastapi/users/test_ui_preferences.py`
 
-Verification target after implementation:
+Verified:
 ```bash
 venv/bin/python -m pytest -q tests_fastapi
+# 146 passed
 ```
 
 ---
