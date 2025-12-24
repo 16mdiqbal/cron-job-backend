@@ -1,5 +1,6 @@
 import logging
 from sqlalchemy import text
+from sqlalchemy.engine import Engine
 
 logger = logging.getLogger(__name__)
 
@@ -10,7 +11,7 @@ def _get_sqlite_columns(conn, table_name: str) -> set[str]:
     return {r[1] for r in rows}
 
 
-def ensure_sqlite_schema(db):
+def ensure_sqlite_schema(engine: Engine) -> None:
     """
     Lightweight SQLite schema guard for when Alembic migrations are not used.
 
@@ -21,7 +22,6 @@ def ensure_sqlite_schema(db):
     Enforce "required" fields at the API layer.
     """
     try:
-        engine = db.engine
         if engine.url.get_backend_name() != 'sqlite':
             return
 

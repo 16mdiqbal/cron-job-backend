@@ -1,21 +1,23 @@
 import uuid
 from datetime import datetime, timezone
-from . import db
+from sqlalchemy import Boolean, Column, DateTime, String
+
+from .base import Base
 
 
-class PicTeam(db.Model):
+class PicTeam(Base):
     __tablename__ = 'pic_teams'
 
-    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    slug = db.Column(db.String(100), nullable=False, unique=True, index=True)
-    name = db.Column(db.String(255), nullable=False)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    slug = Column(String(100), nullable=False, unique=True, index=True)
+    name = Column(String(255), nullable=False)
     # Slack handle/mention used in notifications (e.g. "@qa-team" or "<!subteam^S123ABC>")
-    slack_handle = db.Column(db.String(255), nullable=True)
-    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    slack_handle = Column(String(255), nullable=True)
+    is_active = Column(Boolean, default=True, nullable=False)
 
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = db.Column(
-        db.DateTime,
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(
+        DateTime,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,

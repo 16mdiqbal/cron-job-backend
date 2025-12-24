@@ -1,3 +1,0 @@
-"""
-Test notifications package initialization.
-"""

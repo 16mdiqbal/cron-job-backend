@@ -1,50 +1,52 @@
 import uuid
 import json
 from datetime import datetime, timezone
-from . import db
+from sqlalchemy import Boolean, Column, Date, DateTime, ForeignKey, String, Text
+
+from .base import Base
 
 
-class Job(db.Model):
+class Job(Base):
     """
     Job model representing a scheduled cron job.
     """
     __tablename__ = 'jobs'
 
-    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = db.Column(db.String(255), nullable=False, unique=True)
-    cron_expression = db.Column(db.String(100), nullable=False)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String(255), nullable=False, unique=True)
+    cron_expression = Column(String(100), nullable=False)
     
     # Optional: Generic webhook URL (for non-GitHub workflows)
-    target_url = db.Column(db.String(500), nullable=True)
+    target_url = Column(String(500), nullable=True)
     
     # GitHub Actions Configuration
-    github_owner = db.Column(db.String(255), nullable=True)
-    github_repo = db.Column(db.String(255), nullable=True)
-    github_workflow_name = db.Column(db.String(255), nullable=True)
+    github_owner = Column(String(255), nullable=True)
+    github_repo = Column(String(255), nullable=True)
+    github_workflow_name = Column(String(255), nullable=True)
     
     # Flexible metadata as JSON (renamed to avoid SQLAlchemy reserved name)
-    job_metadata = db.Column(db.Text, nullable=True)
+    job_metadata = Column(Text, nullable=True)
 
     # Category / grouping (required in current DB schema)
-    category = db.Column(db.String(100), nullable=False, default='general')
+    category = Column(String(100), nullable=False, default='general')
 
     # Ownership + lifecycle
     # - end_date is required at API level for new jobs (stored as date-only)
     # - pic_team is required at API level for new jobs (stores PicTeam.slug)
-    end_date = db.Column(db.Date, nullable=True)
-    pic_team = db.Column(db.String(100), nullable=True)
+    end_date = Column(Date, nullable=True)
+    pic_team = Column(String(100), nullable=True)
     
     # Email notification settings
-    enable_email_notifications = db.Column(db.Boolean, default=False, nullable=False)
-    notification_emails = db.Column(db.Text, nullable=True)
-    notify_on_success = db.Column(db.Boolean, default=False, nullable=False)
+    enable_email_notifications = Column(Boolean, default=False, nullable=False)
+    notification_emails = Column(Text, nullable=True)
+    notify_on_success = Column(Boolean, default=False, nullable=False)
     
     # User who created this job (for ownership and authorization)
-    created_by = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=True)
+    created_by = Column(String(36), ForeignKey('users.id'), nullable=True)
     
-    is_active = db.Column(db.Boolean, default=True, nullable=False)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc), nullable=False)
 
     def get_metadata(self):
         """

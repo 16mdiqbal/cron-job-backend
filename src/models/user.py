@@ -1,10 +1,13 @@
 import uuid
 from datetime import datetime, timezone
 from passlib.hash import pbkdf2_sha256
-from . import db
+from sqlalchemy import Boolean, Column, DateTime, String
+from sqlalchemy.orm import relationship
+
+from .base import Base
 
 
-class User(db.Model):
+class User(Base):
     """
     User model for authentication and authorization.
     
@@ -15,21 +18,21 @@ class User(db.Model):
     """
     __tablename__ = 'users'
     
-    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    username = db.Column(db.String(80), unique=True, nullable=False, index=True)
-    email = db.Column(db.String(120), unique=True, nullable=False, index=True)
-    password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(20), nullable=False, default='viewer')  # admin, user, viewer
-    is_active = db.Column(db.Boolean, default=True, nullable=False)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = db.Column(
-        db.DateTime, 
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    username = Column(String(80), unique=True, nullable=False, index=True)
+    email = Column(String(120), unique=True, nullable=False, index=True)
+    password_hash = Column(String(255), nullable=False)
+    role = Column(String(20), nullable=False, default='viewer')  # admin, user, viewer
+    is_active = Column(Boolean, default=True, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc)
     )
     
     # Relationship: User can have multiple jobs
-    jobs = db.relationship('Job', backref='owner', lazy=True, foreign_keys='Job.created_by')
+    jobs = relationship('Job', backref='owner', foreign_keys='Job.created_by')
     
     def __repr__(self):
         return f'<User {self.username} ({self.role})>'

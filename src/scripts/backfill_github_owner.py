@@ -4,8 +4,9 @@ import os
 
 os.environ.setdefault('SCHEDULER_ENABLED', 'false')
 
-from ..app import app as flask_app
-from ..models import db
+from sqlalchemy import select
+
+from ..database.session import get_db_session
 from ..models.job import Job
 
 
@@ -15,13 +16,17 @@ def main():
     parser.add_argument("--dry-run", action="store_true", help="Only report changes, do not write")
     args = parser.parse_args()
 
-    with flask_app.app_context():
-        query = Job.query.filter(
-            Job.github_repo.isnot(None),
-            Job.github_workflow_name.isnot(None),
+    with get_db_session() as session:
+        jobs = (
+            session.execute(
+                select(Job).where(
+                    Job.github_repo.is_not(None),
+                    Job.github_workflow_name.is_not(None),
+                )
+            )
+            .scalars()
+            .all()
         )
-
-        jobs = query.all()
         to_update = [j for j in jobs if (j.github_owner or "").strip() != args.owner]
 
         print(f"Found {len(jobs)} GitHub jobs; will update {len(to_update)} to github_owner='{args.owner}'")
@@ -31,7 +36,7 @@ def main():
         for job in to_update:
             job.github_owner = args.owner
 
-        db.session.commit()
+        session.commit()
         print("Done.")
 
 

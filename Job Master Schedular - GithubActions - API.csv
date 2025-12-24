@@ -1,0 +1,1225 @@
+Job Name,Repo,Workflow Name,Branch,Cron schedule (JST),Status,End Date,PIC Team,Request Body
+For Testing,qa-automate-apiqa,Parallelism_Testing_Launcher,optimize-tests-distribution,34 16 * * 5,Disable,2026-02-10,PAM,"{
+    ""prjName"": ""Test-Distribution-O2O"",
+    ""branchDetails"": ""optimize-tests-distribution"",
+    ""cucumberTags"": ""(@stg and @O2O and not @not-qa) or @pp4bAllDomains"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""6"",
+    ""slack_recipient"": """",
+    ""channel"": """",
+    ""enable_webdriver"": ""false""
+ }"
+QA - PP-INDIA-PAAS,qa-automate-apiqa,qa-automate-apiqa,Parallelism_Testing_Launcher,0 10 * * 2,Disable,2026-02-02,CAG,"{
+  ""prjName"": ""Env-QA-INDIA-PAAS"",
+  ""branchDetails"": ""master"",
+  ""cucumberTags"": ""@stg and @backend and @ppind and not @not-qa"",
+  ""environment"": ""QA"",
+  ""parallelExecutors"": ""4"",
+  ""parallelContainers"": ""5"",
+  ""slack_recipient"": """",
+  ""channel"": """",
+  ""enable_webdriver"": ""false""
+}"
+QA - PP-INDIA-PAAS,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 3,Enable,2026-03-21,QA Tech,"{
+  ""prjName"": ""Env-QA-INDIA-PAAS"",
+  ""branchDetails"": ""master"",
+  ""cucumberTags"": ""@stg and @backend and @ppind and not @not-qa"",
+  ""environment"": ""QA"",
+  ""parallelExecutors"": ""4"",
+  ""parallelContainers"": ""5"",
+  ""slack_recipient"": """",
+  ""channel"": ""CKZLL1PKL"",
+  ""enable_webdriver"": ""false""
+}"
+QA - PP-INDIA-PAAS,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 4,Enable,2026-01-13,PAM,"{
+  ""prjName"": ""Env-QA-INDIA-PAAS"",
+  ""branchDetails"": ""master"",
+  ""cucumberTags"": ""@stg and @backend and @ppind and not @not-qa"",
+  ""environment"": ""QA"",
+  ""parallelExecutors"": ""4"",
+  ""parallelContainers"": ""5"",
+  ""slack_recipient"": """",
+  ""channel"": ""CKZLL1PKL"",
+  ""enable_webdriver"": ""false""
+}"
+QA - PP-INDIA-PAAS-RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 2,Disable,2026-02-08,CAG,"{
+  ""prjName"": ""Env-QA-INDIA-PAAS-RERUN"",
+  ""branchDetails"": ""master"",
+  ""cucumberTags"": ""@stg and @backend and @ppind and not @not-qa"",
+  ""environment"": ""QA"",
+  ""parallelExecutors"": ""4"",
+  ""parallelContainers"": ""5"",
+  ""slack_recipient"": """",
+  ""channel"": """",
+  ""enable_webdriver"": ""false"",
+  ""rerun"": ""true""
+}"
+QA - PP-INDIA-PAAS-RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 3,Enable,2026-03-11,FSBP,"{
+  ""prjName"": ""Env-QA-INDIA-PAAS-RERUN"",
+  ""branchDetails"": ""master"",
+  ""cucumberTags"": ""@stg and @backend and @ppind and not @not-qa"",
+  ""environment"": ""QA"",
+  ""parallelExecutors"": ""4"",
+  ""parallelContainers"": ""5"",
+  ""slack_recipient"": """",
+  ""channel"": ""CKZLL1PKL"",
+  ""enable_webdriver"": ""false"",
+  ""rerun"": ""true""
+}"
+QA - PP-INDIA-PAAS-RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 4,Enable,2026-01-14,CAG,"{
+  ""prjName"": ""Env-QA-INDIA-PAAS-RERUN"",
+  ""branchDetails"": ""master"",
+  ""cucumberTags"": ""@stg and @backend and @ppind and not @not-qa"",
+  ""environment"": ""QA"",
+  ""parallelExecutors"": ""4"",
+  ""parallelContainers"": ""5"",
+  ""slack_recipient"": """",
+  ""channel"": ""CKZLL1PKL"",
+  ""enable_webdriver"": ""false"",
+  ""rerun"": ""true""
+}"
+QA - O2O,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 6 * * 2,Disable,2026-02-26,PAM,"{
+    ""prjName"": ""Env-QA-DAY-O2O"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and (@plc or @channel)"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""6"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+QA - O2O,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 6 * * 3,Enable,2026-02-07,O2O,"{
+    ""prjName"": ""Env-QA-DAY-O2O"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and (@plc or @channel)"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""6"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+QA - O2O,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 6 * * 4,Enable,2026-02-11,O2O,"{
+    ""prjName"": ""Env-QA-DAY-O2O"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and (@plc or @channel)"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""6"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+QA - O2O - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 7 * * 2,Disable,2026-03-16,CAG,"{
+    ""prjName"": ""Env-QA-DAY-O2O-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and (@plc or @channel)"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""6"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"": ""true""
+ }"
+QA - O2O - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 7 * * 3,Enable,2026-02-07,O2O,"{
+    ""prjName"": ""Env-QA-DAY-O2O-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and (@plc or @channel)"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""6"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"": ""true""
+ }"
+QA - O2O - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 7 * * 4,Enable,2026-01-26,PAM,"{
+    ""prjName"": ""Env-QA-DAY-O2O-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and (@plc or @channel)"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""6"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"": ""true""
+ }"
+QA - PP4B,qa-automate-apiqa,Parallelism_Testing_Launcher,master,"0 3 * * 1,5",Enable,2026-02-09,CAG,"{
+    ""prjName"": ""Env-QA-DAY-PP4B"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and (@ppfb_o2o or @pp4bAllDomains)"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""3"",
+    ""slack_recipient"": ""S04Q8MBMZQR,S03SAPWCNG6"",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+QA - PP4B - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,"0 5 * * 1,5",Enable,2026-02-14,O2O,"{
+    ""prjName"": ""Env-QA-DAY-PP4B-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and (@ppfb_o2o or @pp4bAllDomains)"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""3"",
+    ""slack_recipient"": ""S04Q8MBMZQR,S03SAPWCNG6"",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"": ""true""
+ }"
+QA-PAY2DC-EMPOWER,qa-automate-apiqa,Parallelism_Testing_Launcher,master,30 10 * * 1,Enable,2026-03-20,PAM,"{
+    ""prjName"": ""Env-QA-DAY-EMPOWER"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @bff and @empower and @pay2dc and @bo and not(@amazon or @billpayment or @ebill)"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": ""S06HMEGRBGS"",
+    ""channel"": ""C07CYRA3162"",
+    ""enable_webdriver"": ""true""
+ }"
+QA-PAY2DC-EMPOWER-RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,30 11 * * 1,Enable,2026-03-03,O2O,"{
+    ""prjName"": ""Env-QA-DAY-EMPOWER-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @bff and @empower and @pay2dc and @bo and not(@amazon or @billpayment or @ebill)"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": ""S06HMEGRBGS"",
+    ""channel"": ""C07CYRA3162"",
+    ""enable_webdriver"": ""true"",
+    ""rerun"": ""true""
+ }"
+QA - COREAPP,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 2,Disable,2026-03-06,PAM,"{
+    ""prjName"": ""Env-QA-DAY-COREAPP"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @coreapp and not @not-qa and not @coreapp-part-run"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""6"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+QA - COREAPP,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 3,Enable,2026-02-25,PAM,"{
+    ""prjName"": ""Env-QA-DAY-COREAPP"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": "" @stg and @coreapp and not @not-qa and not @coreapp-part-run"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""6"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+QA - COREAPP,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 4,Enable,2026-01-17,QA Tech,"{
+    ""prjName"": ""Env-QA-DAY-COREAPP"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": "" @stg and @coreapp and not @not-qa and not @coreapp-part-run"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""6"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+QA - COREAPP - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 2,Disable,2026-03-13,QA Tech,"{
+    ""prjName"": ""Env-QA-DAY-COREAPP-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": "" @stg and @coreapp and not @not-qa and not @coreapp-part-run"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""6"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+QA - COREAPP - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 3,Enable,2026-02-02,FSBP,"{
+    ""prjName"": ""Env-QA-DAY-COREAPP-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": "" @stg and @coreapp and not @not-qa and not @coreapp-part-run"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""6"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+QA - COREAPP - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 4,Enable,2026-02-19,QA Tech,"{
+    ""prjName"": ""Env-QA-DAY-COREAPP-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": "" @stg and @coreapp and not @not-qa and not @coreapp-part-run"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""6"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+QA - P2DC_PAYROLL,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 2,Disable,2026-03-07,FSBP,"{
+    ""prjName"": ""Env-QA-DAY-P2DC_PAYROLL"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @Payroll and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+QA - P2DC_PAYROLL,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 3,Enable,2026-03-19,FSBP,"{
+    ""prjName"": ""Env-QA-DAY-P2DC_PAYROLL"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @Payroll and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+QA - P2DC_PAYROLL,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 4,Enable,2026-03-09,O2O,"{
+    ""prjName"": ""Env-QA-DAY-P2DC_PAYROLL"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @Payroll and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+QA - P2DC_PAYROLL - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 2,Disable,2026-01-19,O2O,"{
+    ""prjName"": ""Env-QA-DAY-P2DC_PAYROLL-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @Payroll and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+QA - P2DC_PAYROLL - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 3,Enable,2026-02-22,O2O,"{
+    ""prjName"": ""Env-QA-DAY-P2DC_PAYROLL-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @Payroll and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+QA - P2DC_PAYROLL - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 4,Enable,2026-01-17,PAM,"{
+    ""prjName"": ""Env-QA-DAY-P2DC_PAYROLL-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @Payroll and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+QA - P2DC,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 2 ,Disable,2026-03-07,O2O,"{
+    ""prjName"": ""Env-QA-DAY-P2DC"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @pay2dc and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+QA - P2DC,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 3 ,Enable,2026-02-03,PAM,"{
+    ""prjName"": ""Env-QA-DAY-P2DC"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @pay2dc and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+QA - P2DC,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 4,Enable,2026-01-21,PAM,"{
+    ""prjName"": ""Env-QA-DAY-P2DC"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @pay2dc and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+QA - P2DC - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 2 ,Disable,2026-02-27,O2O,"{
+    ""prjName"": ""Env-QA-DAY-P2DC-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @pay2dc and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+QA - P2DC - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 3 ,Enable,2026-01-19,PAM,"{
+    ""prjName"": ""Env-QA-DAY-P2DC-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @pay2dc and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+QA - P2DC - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 4,Enable,2026-03-10,PAM,"{
+    ""prjName"": ""Env-QA-DAY-P2DC-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @pay2dc and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+QA - FSBP,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 2,Disable,2026-02-01,CAG,"{
+    ""prjName"": ""Env-QA-DAY-FSBP"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @financialService and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": """",
+    ""enable_webdriver"": ""false""
+}"
+QA - FSBP,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 3,Enable,2026-02-01,FSBP,"{
+    ""prjName"": ""Env-QA-DAY-FSBP"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @financialService and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+}"
+QA - FSBP,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 4,Enable,2026-03-14,FSBP,"{
+    ""prjName"": ""Env-QA-DAY-FSBP"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @financialService and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+}"
+QA - FSBP - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 2 ,Disable,2026-03-15,FSBP,"{
+    ""prjName"": ""Env-QA-DAY-FSBP-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @financialService and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": """",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+}"
+QA - FSBP - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 3 ,Enable,2026-01-24,PAM,"{
+    ""prjName"": ""Env-QA-DAY-FSBP-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @financialService and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+}"
+QA - FSBP - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 4,Enable,2026-01-19,FSBP,"{
+    ""prjName"": ""Env-QA-DAY-FSBP-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @financialService and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+}"
+QA - PAM,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 20 * * 1 ,Disable,2026-02-15,FSBP,"{
+    ""prjName"": ""Env-QA-DAY-PAM"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @onlineMiniapp and not @post_payment_v2 and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""10"",
+    ""slack_recipient"": """",
+    ""channel"": """",
+    ""enable_webdriver"": ""false""
+ }"
+QA - PAM,qa-automate-apiqa,Parallelism_Testing_Launcher,master,30 21 * * 1 ,Disable,2026-02-15,CAG,"{
+    ""prjName"": ""Env-QA-DAY-PAM-V2"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @onlineMiniapp and @post_payment_v2 and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""10"",
+    ""slack_recipient"": """",
+    ""channel"": """",
+    ""enable_webdriver"": ""false""
+ }"
+QA - PAM,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 20 * * 2 ,Enable,2026-02-05,CAG,"{
+    ""prjName"": ""Env-QA-DAY-PAM"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @onlineMiniapp and not @post_payment_v2 and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""10"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+QA - PAM,qa-automate-apiqa,Parallelism_Testing_Launcher,master,30 21 * * 2 ,Enable,2026-03-22,PAM,"{
+    ""prjName"": ""Env-QA-DAY-PAM-V2"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @onlineMiniapp and @post_payment_v2 and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""10"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+QA - PAM,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 20 * * 3 ,Enable,2026-03-14,O2O,"{
+    ""prjName"": ""Env-QA-DAY-PAM"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @onlineMiniapp and not @post_payment_v2 and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""10"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+QA - PAM,qa-automate-apiqa,Parallelism_Testing_Launcher,master,30 21 * * 3,Enable,2026-03-07,CAG,"{
+    ""prjName"": ""Env-QA-DAY-PAM-V2"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @onlineMiniapp and @post_payment_v2 and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""10"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+QA - PAM - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,50 22 * * 1 ,Disable,2026-02-10,PAM,"{
+    ""prjName"": ""Env-QA-DAY-PAM-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @onlineMiniapp and not @post_payment_v2 and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""10"",
+    ""slack_recipient"": """",
+    ""channel"": """",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+QA - PAM - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,20 23 * * 1 ,Disable,2026-01-15,CAG,"{
+    ""prjName"": ""Env-QA-DAY-PAM-V2-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @onlineMiniapp and @post_payment_v2 and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""10"",
+    ""slack_recipient"": """",
+    ""channel"": """",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+QA - PAM - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,50 22 * * 2 ,Enable,2026-03-18,O2O,"{
+    ""prjName"": ""Env-QA-DAY-PAM-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @onlineMiniapp and not @post_payment_v2 and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""10"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+QA - PAM - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,20 23 * * 2 ,Enable,2026-01-15,PAM,"{
+    ""prjName"": ""Env-QA-DAY-PAM-V2-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @onlineMiniapp and @post_payment_v2 and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""10"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+QA - PAM - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,50 22 * * 3,Enable,2026-01-13,CAG,"{
+    ""prjName"": ""Env-QA-DAY-PAM-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @onlineMiniapp and not @post_payment_v2 and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""10"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+QA - PAM - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,20 23 * * 3,Enable,2026-01-15,O2O,"{
+    ""prjName"": ""Env-QA-DAY-PAM-V2-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @onlineMiniapp and @post_payment_v2 and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""10"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+QA - PAM_BO,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 20 * * 1,Disable,2026-01-25,FSBP,"{
+    ""prjName"": ""Env-QA-DAY-PAM-BO"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@sandbox and @onlineMiniapp and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": """",
+    ""enable_webdriver"": ""true""
+ }"
+QA - PAM_BO,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 20 * * 2 ,Enable,2026-02-09,QA Tech,"{
+    ""prjName"": ""Env-QA-DAY-PAM-BO"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@sandbox and @onlineMiniapp and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""true""
+ }"
+QA - PAM_BO,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 20 * * 3,Enable,2026-03-16,FSBP,"{
+    ""prjName"": ""Env-QA-DAY-PAM-BO"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@sandbox and @onlineMiniapp and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""true""
+ }"
+QA - PAM_BO - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 21 * * 1,Disable,2026-01-14,CAG,"{
+    ""prjName"": ""Env-QA-DAY-PAM-BO-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@sandbox and @onlineMiniapp and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""true"",
+    ""rerun"":""true""
+ }"
+QA - PAM_BO - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 21 * * 2 ,Enable,2026-01-27,QA Tech,"{
+    ""prjName"": ""Env-QA-DAY-PAM-BO-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@sandbox and @onlineMiniapp and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""true"",
+    ""rerun"":""true""
+ }"
+QA - PAM_BO - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 21 * * 3,Enable,2026-01-13,FSBP,"{
+    ""prjName"": ""Env-QA-DAY-PAM-BO-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@sandbox and @onlineMiniapp and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""true"",
+    ""rerun"":""true""
+ }"
+QA - Back Office,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 2,Disable,2026-03-08,O2O,"{
+    ""prjName"": ""Env-QA-DAY-BACK_OFFICE"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @bo and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": """",
+    ""enable_webdriver"": ""true""
+ }"
+QA - Back Office,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 3,Enable,2026-01-18,PAM,"{
+    ""prjName"": ""Env-QA-DAY-BACK_OFFICE"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @bo and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""true""
+ }"
+QA - Back Office,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 4,Enable,2026-03-15,QA Tech,"{
+    ""prjName"": ""Env-QA-DAY-BACK_OFFICE"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @bo and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""true""
+ }"
+QA - Back Office-RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 2,Disable,2026-03-01,PAM,"{
+    ""prjName"": ""Env-QA-DAY-BACK_OFFICE-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @bo and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": """",
+    ""enable_webdriver"": ""true"",
+    ""rerun"":""true""
+ }"
+QA - Back Office-RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 3,Enable,2026-03-23,CAG,"{
+    ""prjName"": ""Env-QA-DAY-BACK_OFFICE-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @bo and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""true"",
+    ""rerun"":""true""
+ }"
+QA - Back Office-RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 4,Enable,2026-03-13,CAG,"{
+    ""prjName"": ""Env-QA-DAY-BACK_OFFICE-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @bo and not @not-qa"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""true"",
+    ""rerun"":""true""
+ }"
+QA - PP4B_O2O,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 8 * * 5,Disable,2026-03-15,QA Tech,"{
+    ""prjName"": ""Env-QA-DAY-PP4B-O2O"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @ppfb_o2o"",
+    ""environment"": ""QA"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""true"",
+    ""rerun"":""false""
+ }"
+STG - MSOE,qa-automate-apiqa,Parallelism_Testing_Launcher,master,10 9 * * 1-4,Enable,2026-02-20,QA Tech,"{
+    ""prjName"": ""Env-STG-DAY-MSOE"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@merchant-platform and (@ms or @oe or @bo)"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""true"",
+    ""rerun"":""false""
+ }"
+STG - MSOE - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,10 10 * * 1-4,Enable,2026-02-14,QA Tech,"{
+    ""prjName"": ""Env-STG-DAY-MSOE-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@merchant-platform and (@ms or @oe or @bo)"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""true"",
+    ""rerun"":""true""
+ }"
+STG - PP-INDIA-PAAS,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 1,Enable,2026-02-20,PAM,"{
+  ""prjName"": ""Env-STG-INDIA-PAAS"",
+  ""branchDetails"": ""master"",
+  ""cucumberTags"": ""@stg and @backend and @ppind"",
+  ""environment"": ""STG"",
+  ""parallelExecutors"": ""4"",
+  ""parallelContainers"": ""7"",
+  ""slack_recipient"": """",
+  ""channel"": ""CKZLL1PKL"",
+  ""enable_webdriver"": ""false""
+}"
+STG - PP-INDIA-PAAS,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 2,Enable,2026-03-20,QA Tech,"{
+  ""prjName"": ""Env-STG-INDIA-PAAS"",
+  ""branchDetails"": ""master"",
+  ""cucumberTags"": ""@stg and @backend and @ppind"",
+  ""environment"": ""STG"",
+  ""parallelExecutors"": ""4"",
+  ""parallelContainers"": ""5"",
+  ""slack_recipient"": """",
+  ""channel"": ""CKZLL1PKL"",
+  ""enable_webdriver"": ""false""
+}"
+STG - PP-INDIA-PAAS-RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 1,Enable,2026-01-25,CAG,"{
+  ""prjName"": ""Env-STG-INDIA-PAAS-RERUN"",
+  ""branchDetails"": ""master"",
+  ""cucumberTags"": ""@stg and @backend and @ppind"",
+  ""environment"": ""STG"",
+  ""parallelExecutors"": ""4"",
+  ""parallelContainers"": ""7"",
+  ""slack_recipient"": """",
+  ""channel"": ""CKZLL1PKL"",
+  ""enable_webdriver"": ""false"",
+  ""rerun"": ""true""
+}"
+STG - PP-INDIA-PAAS-RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 2,Enable,2026-03-19,CAG,"{
+  ""prjName"": ""Env-STG-INDIA-PAAS-RERUN"",
+  ""branchDetails"": ""master"",
+  ""cucumberTags"": ""@stg and @backend and @ppind"",
+  ""environment"": ""STG"",
+  ""parallelExecutors"": ""4"",
+  ""parallelContainers"": ""5"",
+  ""slack_recipient"": """",
+  ""channel"": ""CKZLL1PKL"",
+  ""enable_webdriver"": ""false"",
+  ""rerun"": ""true""
+}"
+STG - O2O,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 6 * * 1,Enable,2026-01-28,QA Tech,"{
+    ""prjName"": ""Env-STG-DAY-O2O"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""(@stg and @O2O) or @pp4bAllDomains"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""8"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+STG - O2O,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 6 * * 2,Enable,2026-02-27,CAG,"{
+    ""prjName"": ""Env-STG-DAY-O2O"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""(@stg and @O2O) or @pp4bAllDomains"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""6"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+STG - O2O - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 7 * * 1,Enable,2026-03-07,QA Tech,"{
+    ""prjName"": ""Env-STG-DAY-O2O-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""(@stg and @O2O) or @pp4bAllDomains"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""8"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""true"",
+    ""rerun"": ""true""
+ }"
+STG - O2O - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 7 * * 2,Enable,2026-01-23,QA Tech,"{
+    ""prjName"": ""Env-STG-DAY-O2O-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""(@stg and @O2O) or @pp4bAllDomains"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""6"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""true"",
+    ""rerun"": ""true""
+ }"
+STG - COREAPP,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 1,Enable,2026-02-13,CAG,"{
+    ""prjName"": ""Env-STG-DAY-COREAPP"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @coreapp and not @coreapp-part-run"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""8"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+STG - COREAPP,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 2,Enable,2026-03-07,QA Tech,"{
+    ""prjName"": ""Env-STG-DAY-COREAPP"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": "" @stg and @coreapp and not @coreapp-part-run"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""6"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+STG - COREAPP - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 1,Enable,2026-02-06,FSBP,"{
+    ""prjName"": ""Env-STG-DAY-COREAPP-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @coreapp and not @coreapp-part-run"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""8"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+STG - COREAPP - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 2,Enable,2026-02-18,PAM,"{
+    ""prjName"": ""Env-STG-DAY-COREAPP-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @coreapp and not @coreapp-part-run"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""6"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+STG - P2DC_PAYROLL,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 1,Enable,2026-03-10,PAM,"{
+    ""prjName"": ""Env-STG-DAY-P2DC_PAYROLL"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @Payroll"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+STG - P2DC_PAYROLL,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 2,Enable,2026-03-18,CAG,"{
+    ""prjName"": ""Env-STG-DAY-P2DC_PAYROLL"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @Payroll"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+STG - P2DC_PAYROLL - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 1,Enable,2026-01-25,PAM,"{
+    ""prjName"": ""Env-STG-DAY-P2DC_PAYROLL-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @Payroll"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+STG - P2DC_PAYROLL - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 2,Enable,2026-01-18,CAG,"{
+    ""prjName"": ""Env-STG-DAY-P2DC_PAYROLL-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @Payroll"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+STG - P2DC,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 1,Enable,2026-01-14,O2O,"{
+    ""prjName"": ""Env-STG-DAY-P2DC"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @pay2dc"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""7"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+STG - P2DC,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 2,Enable,2026-02-05,QA Tech,"{
+    ""prjName"": ""Env-STG-DAY-P2DC"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @pay2dc"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+STG - P2DC - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 1,Enable,2026-03-22,QA Tech,"{
+    ""prjName"": ""Env-STG-DAY-P2DC-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @pay2dc"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""7"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+STG - P2DC - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 2,Enable,2026-02-21,QA Tech,"{
+    ""prjName"": ""Env-STG-DAY-P2DC-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @pay2dc"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+STG - FSBP,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 1,Enable,2026-03-24,FSBP,"{
+    ""prjName"": ""Env-STG-DAY-FSBP"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @financialService"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+}"
+STG - FSBP,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 10 * * 2,Enable,2026-02-26,PAM,"{
+    ""prjName"": ""Env-STG-DAY-FSBP"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @financialService"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+}"
+STG - FSBP - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 1,Enable,2026-01-26,PAM,"{
+    ""prjName"": ""Env-STG-DAY-FSBP-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @financialService"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""7"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+}"
+STG - FSBP - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 11 * * 2,Enable,2026-01-28,O2O,"{
+    ""prjName"": ""Env-STG-DAY-FSBP-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @financialService"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""5"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+}"
+STG - PAM,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 20 * * 0,Enable,2026-03-22,QA Tech,"{
+    ""prjName"": ""Env-STG-DAY-PAM"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @onlineMiniapp and not @post_payment_v2"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""12"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+STG - PAM,qa-automate-apiqa,Parallelism_Testing_Launcher,master,30 21 * * 0,Enable,2026-01-19,FSBP,"{
+    ""prjName"": ""Env-STG-DAY-PAM-V2"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @onlineMiniapp and @post_payment_v2"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""12"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+STG - PAM,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 20 * * 1 ,Enable,2026-01-20,FSBP,"{
+    ""prjName"": ""Env-STG-DAY-PAM"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @onlineMiniapp and not @post_payment_v2"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""10"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+STG - PAM,qa-automate-apiqa,Parallelism_Testing_Launcher,master,30 21 * * 1 ,Enable,2026-01-17,QA Tech,"{
+    ""prjName"": ""Env-STG-DAY-PAM-V2"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @onlineMiniapp and @post_payment_v2"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""10"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+STG - PAM - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 23 * * 0,Enable,2026-01-17,CAG,"{
+    ""prjName"": ""Env-STG-DAY-PAM-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @onlineMiniapp and not @post_payment_v2"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""12"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+STG - PAM - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,30 23 * * 0,Enable,2026-03-01,PAM,"{
+    ""prjName"": ""Env-STG-DAY-PAM-V2-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @onlineMiniapp and @post_payment_v2"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""12"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+STG - PAM - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 23 * * 1 ,Enable,2026-01-24,O2O,"{
+    ""prjName"": ""Env-STG-DAY-PAM-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @onlineMiniapp and not @post_payment_v2"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""10"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+STG - PAM - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,30 23 * * 1 ,Enable,2026-02-19,CAG,"{
+    ""prjName"": ""Env-STG-DAY-PAM-V2-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@stg and @onlineMiniapp and @post_payment_v2"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""10"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+STG - PAM_BO,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 20 * * 0,Enable,2026-01-19,CAG,"{
+    ""prjName"": ""Env-STG-DAY-PAM-BO"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@sandbox and @onlineMiniapp"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+STG - PAM_BO,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 20 * * 1 ,Enable,2026-03-14,CAG,"{
+    ""prjName"": ""Env-STG-DAY-PAM-BO"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@sandbox and @onlineMiniapp"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false""
+ }"
+STG - PAM_BO - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 21 * * 0 ,Enable,2026-02-16,O2O,"{
+    ""prjName"": ""Env-STG-DAY-PAM-BO-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@sandbox and @onlineMiniapp"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": ""CKZLL1PKL"",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+STG - PAM_BO - RERUN,qa-automate-apiqa,Parallelism_Testing_Launcher,master,0 21 * * 1 ,Enable,2026-03-19,FSBP,"{
+    ""prjName"": ""Env-STG-DAY-PAM-BO-RERUN"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@sandbox and @onlineMiniapp"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""4"",
+    ""parallelContainers"": ""1"",
+    ""slack_recipient"": """",
+    ""channel"": """",
+    ""enable_webdriver"": ""false"",
+    ""rerun"":""true""
+ }"
+DR Testing - API - Morning,qa-automate-apiqa,API_Launcher,master,30 13 * * 4,Enable,2026-02-16,O2O,"{
+  ""prjName"": ""DR-API_MORNING-EXECUTION"",
+  ""cucumberTags"": ""@stg and (@dr)"",
+  ""environment"": ""STG"",
+  ""branchDetails"": ""master""
+}"
+DR Testing - API - Failback,qa-automate-apiqa,API_Launcher,master,0 23 * * 4,Enable,2026-03-08,FSBP,"{
+  ""prjName"": ""DR-API_FAILBACK-EXECUTION"",
+  ""cucumberTags"": ""@stg and (@dr)"",
+  ""environment"": ""STG"",
+  ""branchDetails"": ""master""
+}"
+OPA code API,qa-automate-apiqa,API_Launcher,testnewapi,50 12 * * 4,Disable,2026-03-04,PAM,"{
+  ""prjName"": ""OPA code - OLD API QA"",
+  ""cucumberTags"": ""@stg and @test1"",
+  ""environment"": ""STG"",
+  ""branchDetails"": ""testexternal""
+}"
+FSBP Service Test Cases,qa-automate-apiqa,API_Launcher,master,0 * * * *,Enable,2026-01-20,QA Tech,"{
+    ""prjName"": ""FSBP Service Test Cases"",
+    ""branchDetails"": ""master"",
+    ""cucumberTags"": ""@service-test and @financialService and @card-secure-internal-gateway"",
+    ""environment"": ""STG"",
+    ""parallelExecutors"": ""5"",
+    ""slack_recipient"": ""U03HRUVCP42"",
+    ""channel"": ""C06LUKMDPQC""
+ }"

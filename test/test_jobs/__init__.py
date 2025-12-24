@@ -1,3 +1,0 @@
-"""
-Test jobs package initialization.
-"""

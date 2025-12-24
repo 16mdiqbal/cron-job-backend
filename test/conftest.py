@@ -1,160 +1,129 @@
-"""
-Pytest configuration and shared fixtures for all tests.
-"""
 import os
-import sys
+
 import pytest
-from datetime import timedelta
-
-# Add parent directory to path to import src modules
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from src.app import create_app
-from src.models import db
-from src.models.user import User
-from src.models.job import Job
+from httpx import ASGITransport, AsyncClient
 
 
-@pytest.fixture(scope='function')
-def app():
-    """Create and configure a test application instance."""
-    # Disable scheduler before creating app
-    os.environ['SCHEDULER_ENABLED'] = 'false'
-    
-    app = create_app()
-    app.config['TESTING'] = True
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
-    app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
-    
-    # Create fresh database for each test
-    with app.app_context():
-        # Drop all tables first (in case they exist)
-        db.drop_all()
-        # Create all tables
-        db.create_all()
-        yield app
-        # Clean up after test
-        db.session.remove()
-        db.drop_all()
-    
-    # Re-enable scheduler after test
-    os.environ['SCHEDULER_ENABLED'] = 'true'
+@pytest.fixture(scope="function")
+def db_url(tmp_path, monkeypatch):
+    db_path = tmp_path / "test.db"
+    database_url = f"sqlite:///{db_path}"
+
+    monkeypatch.setenv("SCHEDULER_ENABLED", "false")
+    monkeypatch.setenv("TESTING", "true")
+    monkeypatch.setenv("ALLOW_DEFAULT_ADMIN", "false")
+    monkeypatch.setenv("SECRET_KEY", "test-secret")
+    monkeypatch.setenv("JWT_SECRET_KEY", "test-secret")
+    monkeypatch.setenv("DATABASE_URL", database_url)
+    monkeypatch.setenv("FASTAPI_DATABASE_URL", database_url)
+
+    # Clear cached settings/engines/session factories so each test uses its own temp DB.
+    from src.app.config import get_settings
+    from src.database import engine as db_engine
+    from src.database import session as db_session
+
+    get_settings.cache_clear()
+    db_engine.get_engine.cache_clear()
+    db_engine.get_async_engine.cache_clear()
+    db_session._sync_session_factory = None
+    db_session._async_session_factory = None
+
+    return database_url
 
 
-@pytest.fixture(scope='function')
-def client(app):
-    """Create a test client."""
-    return app.test_client()
+@pytest.fixture(scope="function")
+def setup_db(db_url):
+    assert os.environ.get("DATABASE_URL") == db_url
+    from src.database.bootstrap import init_db
+
+    init_db()
+    yield
 
 
-@pytest.fixture(scope='function')
-def admin_user(app):
-    """Create an admin user for testing."""
-    with app.app_context():
-        admin = User(
-            username='admin',
-            email='admin@example.com',
-            role='admin'
-        )
-        admin.set_password('admin123')
-        db.session.add(admin)
-        db.session.commit()
-        return admin
+@pytest.fixture(scope="function")
+def db_session(setup_db):
+    from src.database.session import get_db_session
+
+    with get_db_session() as session:
+        yield session
 
 
-@pytest.fixture(scope='function')
-def regular_user(app):
-    """Create a regular user for testing."""
-    with app.app_context():
-        user = User(
-            username='user',
-            email='user@example.com',
-            role='user'
-        )
-        user.set_password('user123')
-        db.session.add(user)
-        db.session.commit()
-        return user
+@pytest.fixture(scope="function")
+def fastapi_app(db_url):
+    assert os.environ.get("DATABASE_URL") == db_url
+    from src.app.main import create_app as create_fastapi_app
+
+    return create_fastapi_app()
 
 
-@pytest.fixture(scope='function')
-def viewer_user(app):
-    """Create a viewer user for testing."""
-    with app.app_context():
-        user = User(
-            username='viewer',
-            email='viewer@example.com',
-            role='viewer'
-        )
-        user.set_password('viewer123')
-        db.session.add(user)
-        db.session.commit()
-        return user
+@pytest.fixture(scope="function")
+async def async_client(fastapi_app):
+    transport = ASGITransport(app=fastapi_app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
 
 
-@pytest.fixture(scope='function')
-def admin_token(client, admin_user):
-    """Get authentication token for admin user."""
-    response = client.post('/api/auth/login', json={
-        'username': 'admin',
-        'password': 'admin123'
-    })
-    assert response.status_code == 200
-    return response.get_json()['access_token']
+@pytest.fixture(scope="function")
+def setup_test_db(db_session):
+    from src.models.user import User
 
+    # Clear users (tests depend on deterministic identities).
+    db_session.query(User).delete()
 
-@pytest.fixture(scope='function')
-def user_token(client, regular_user):
-    """Get authentication token for regular user."""
-    response = client.post('/api/auth/login', json={
-        'username': 'user',
-        'password': 'user123'
-    })
-    assert response.status_code == 200
-    return response.get_json()['access_token']
+    admin = User(username="testadmin", email="testadmin@example.com", role="admin", is_active=True)
+    admin.set_password("admin123")
+    db_session.add(admin)
 
+    user = User(username="testuser", email="testuser@example.com", role="user", is_active=True)
+    user.set_password("user123")
+    db_session.add(user)
 
-@pytest.fixture(scope='function')
-def viewer_token(client, viewer_user):
-    """Get authentication token for viewer user."""
-    response = client.post('/api/auth/login', json={
-        'username': 'viewer',
-        'password': 'viewer123'
-    })
-    assert response.status_code == 200
-    return response.get_json()['access_token']
+    inactive = User(username="inactiveuser", email="inactive@example.com", role="user", is_active=False)
+    inactive.set_password("inactive123")
+    db_session.add(inactive)
 
+    viewer = User(username="testviewer", email="testviewer@example.com", role="viewer", is_active=True)
+    viewer.set_password("viewer123")
+    db_session.add(viewer)
 
-@pytest.fixture(scope='function')
-def sample_job_data():
-    """Sample job data for testing."""
+    db_session.commit()
+
     return {
-        'name': 'Test Job',
-        'cron_expression': '0 * * * *',
-        'target_url': 'https://httpbin.org/status/200'
+        "admin": admin,
+        "user": user,
+        "inactive": inactive,
+        "viewer": viewer,
     }
 
 
-@pytest.fixture(scope='function')
-def sample_job_with_notifications():
-    """Sample job data with notifications enabled."""
-    return {
-        'name': 'Notify Job',
-        'cron_expression': '0 12 * * *',
-        'target_url': 'https://httpbin.org/status/200',
-        'enable_email_notifications': True,
-        'notification_emails': ['admin@example.com', 'team@example.com'],
-        'notify_on_success': True
-    }
+@pytest.fixture
+def admin_access_token(setup_test_db):
+    admin = setup_test_db["admin"]
+    from src.app.dependencies.auth import create_access_token
+
+    return create_access_token(user_id=admin.id, role=admin.role, email=admin.email)
 
 
-@pytest.fixture(scope='function')
-def sample_github_job():
-    """Sample GitHub Actions job data for testing."""
-    return {
-        'name': 'GitHub Job',
-        'cron_expression': '0 0 * * *',
-        'github_owner': 'myorg',
-        'github_repo': 'myrepo',
-        'github_workflow_name': 'deploy.yml'
-    }
+@pytest.fixture
+def user_access_token(setup_test_db):
+    user = setup_test_db["user"]
+    from src.app.dependencies.auth import create_access_token
+
+    return create_access_token(user_id=user.id, role=user.role, email=user.email)
+
+
+@pytest.fixture
+def viewer_access_token(setup_test_db):
+    viewer = setup_test_db["viewer"]
+    from src.app.dependencies.auth import create_access_token
+
+    return create_access_token(user_id=viewer.id, role=viewer.role, email=viewer.email)
+
+
+@pytest.fixture
+def admin_refresh_token(setup_test_db):
+    admin = setup_test_db["admin"]
+    from src.app.dependencies.auth import create_refresh_token
+
+    return create_refresh_token(user_id=admin.id, role=admin.role, email=admin.email)
+
