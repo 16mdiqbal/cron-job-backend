@@ -280,7 +280,7 @@ async def get_optional_user(token: str = Depends(oauth2_scheme_optional)) -> Opt
 ### Deliverables
 - [x] FastAPI auth dependencies complete
 - [x] Single Sign-On across both stacks
-- [x] FastAPI tests passing (`tests_fastapi/`, 54 tests)
+- [x] FastAPI tests passing (`test/`, 54 tests)
 
 ### Notes
 ```
@@ -302,12 +302,12 @@ Files created/updated:
   - POST /api/v2/auth/logout - Logout endpoint
   - GET /api/v2/auth/verify - Token verification
 
-- `tests_fastapi/auth/` (28 tests ✅)
+- `test/auth/` (28 tests ✅)
   - Login, token refresh, user registration tests
   - Role-based access control tests
   - Cross-stack JWT compatibility (Flask ↔ FastAPI)
 
-- `tests_fastapi/core/` + `tests_fastapi/database/` (3 tests ✅)
+- `test/core/` + `test/database/` (3 tests ✅)
   - Phase 1 health/OpenAPI smoke tests
   - Phase 2 async session/model compatibility test
 
@@ -385,20 +385,20 @@ Migrate low-risk, read-only endpoints first for validation.
   - [x] `src/fastapi_app/schemas/executions_read.py`
   - [x] `src/fastapi_app/schemas/taxonomy_read.py`
 - [x] Add automated tests (FastAPI response shape + auth enforcement)
-- [x] Keep tests split by service under `tests_fastapi/` (e.g. `tests_fastapi/jobs/`, `tests_fastapi/executions/`, `tests_fastapi/taxonomy/`)
+- [x] Keep tests split by service under `test/` (e.g. `test/jobs/`, `test/executions/`, `test/taxonomy/`)
 - [ ] Optional: add cross-stack JSON diff parity tests (Flask ↔ FastAPI) against a running local server
 
 Phase 4B tests:
-- [x] `tests_fastapi/jobs/test_jobs_read.py`
+- [x] `test/jobs/test_jobs_read.py`
 
 Phase 4C tests:
-- [x] `tests_fastapi/executions/test_job_executions_read.py`
+- [x] `test/executions/test_job_executions_read.py`
 
 Phase 4D tests:
-- [x] `tests_fastapi/executions/test_executions_global_read.py`
+- [x] `test/executions/test_executions_global_read.py`
 
 Phase 4E tests:
-- [x] `tests_fastapi/taxonomy/test_taxonomy_read.py`
+- [x] `test/taxonomy/test_taxonomy_read.py`
 
 ### Deliverables
 - [x] Phase 4 endpoints on `/api/v2/` (4A–4E)
@@ -408,7 +408,7 @@ Phase 4E tests:
 ### Notes
 Verified locally:
 ```bash
-venv/bin/python -m pytest -q tests_fastapi
+venv/bin/python -m pytest -q test
 # 54 passed
 ```
 
@@ -444,12 +444,12 @@ Migrate job creation, update, and deletion with full validation.
 
 | Sub-Phase | Goal | Endpoints | Primary Test Location |
 |----------:|------|-----------|------------------------|
-| **5A** | Job create (validation + RBAC) | `POST /api/v2/jobs` | `tests_fastapi/jobs_write/test_create.py` ✅ |
-| **5B** | Job update (partial update + ownership rules) | `PUT /api/v2/jobs/{id}` | `tests_fastapi/jobs_write/test_update.py` ✅ |
-| **5C** | Job delete (parity behavior + RBAC) | `DELETE /api/v2/jobs/{id}` | `tests_fastapi/jobs_write/test_delete.py` ✅ |
-| **5D** | Manual execute (execution record + trigger) | `POST /api/v2/jobs/{id}/execute` | `tests_fastapi/jobs_write/test_execute.py` ✅ |
-| **5E** | Bulk CSV upload (validation + partial success) | `POST /api/v2/jobs/bulk-upload` | `tests_fastapi/jobs_write/test_bulk_upload.py` ✅ |
-| **5F** | Cron utilities | `POST /api/v2/jobs/validate-cron`, `POST /api/v2/jobs/cron-preview`, `POST /api/v2/jobs/test-run` | `tests_fastapi/cron_tools/*` ✅ |
+| **5A** | Job create (validation + RBAC) | `POST /api/v2/jobs` | `test/jobs_write/test_create.py` ✅ |
+| **5B** | Job update (partial update + ownership rules) | `PUT /api/v2/jobs/{id}` | `test/jobs_write/test_update.py` ✅ |
+| **5C** | Job delete (parity behavior + RBAC) | `DELETE /api/v2/jobs/{id}` | `test/jobs_write/test_delete.py` ✅ |
+| **5D** | Manual execute (execution record + trigger) | `POST /api/v2/jobs/{id}/execute` | `test/jobs_write/test_execute.py` ✅ |
+| **5E** | Bulk CSV upload (validation + partial success) | `POST /api/v2/jobs/bulk-upload` | `test/jobs_write/test_bulk_upload.py` ✅ |
+| **5F** | Cron utilities | `POST /api/v2/jobs/validate-cron`, `POST /api/v2/jobs/cron-preview`, `POST /api/v2/jobs/test-run` | `test/cron_tools/*` ✅ |
 
 ### Implementation Notes (Guidelines)
 
@@ -481,7 +481,7 @@ Migrate job creation, update, and deletion with full validation.
 
 ### Deliverables
 - [x] Phase 5A–5F endpoints implemented and documented
-- [x] FastAPI tests added for each sub-phase and passing (`venv/bin/python -m pytest -q tests_fastapi`)
+- [x] FastAPI tests added for each sub-phase and passing (`venv/bin/python -m pytest -q test`)
 - [x] No APScheduler add/reschedule/remove logic in FastAPI (Phase 8 responsibility)
 - [x] RBAC + validation coverage complete for write flows
 
@@ -504,7 +504,7 @@ Implementation location:
 - Response:
   - `201`: `{"message":"Job created successfully","job":{...}}`
   - Errors use `{"error": "...", "message": "..."}` where applicable
-- Tests: `tests_fastapi/jobs_write/test_create.py`
+- Tests: `test/jobs_write/test_create.py`
 
 #### 5B — Update job (`PUT /api/v2/jobs/{id}`)
 - Auth: `admin` or `user` (ownership enforced for `user`)
@@ -518,14 +518,14 @@ Implementation location:
   - Guard: cannot enable an expired job without updating `end_date`
 - Response:
   - `200`: `{"message":"Job updated successfully","job":{...}}`
-- Tests: `tests_fastapi/jobs_write/test_update.py`
+- Tests: `test/jobs_write/test_update.py`
 
 #### 5C — Delete job (`DELETE /api/v2/jobs/{id}`)
 - Auth: `admin` or `user` (ownership enforced for `user`)
 - Scope note: no APScheduler removal here; deferred to Phase 8
 - Response:
   - `200`: `{"message":"Job deleted successfully","deleted_job":{"id":"...","name":"..."}}`
-- Tests: `tests_fastapi/jobs_write/test_delete.py`
+- Tests: `test/jobs_write/test_delete.py`
 
 #### 5D — Manual execute (`POST /api/v2/jobs/{id}/execute`)
 - Auth: `admin` or `user` (ownership enforced for `user`)
@@ -536,7 +536,7 @@ Implementation location:
   - Webhook runs perform HTTP calls; GitHub runs dispatch workflows (requires token via payload `github_token` or env `GITHUB_TOKEN`)
 - Response:
   - `200`: `{"message":"Job triggered successfully","job_id":"..."}`
-- Tests: `tests_fastapi/jobs_write/test_execute.py`
+- Tests: `test/jobs_write/test_execute.py`
 
 #### 5E — Bulk CSV upload (`POST /api/v2/jobs/bulk-upload`)
 - Auth: `admin` or `user`
@@ -557,7 +557,7 @@ Implementation location:
   - `200` always for row-level partial success (even with errors)
   - `400` for structural CSV issues (e.g., empty file)
   - Shape matches Flask: includes `dry_run`, `stats`, `created_count`, `error_count`, `errors`, `jobs`
-- Tests: `tests_fastapi/jobs_write/test_bulk_upload.py`
+- Tests: `test/jobs_write/test_bulk_upload.py`
 
 #### 5F — Cron utilities
 - `POST /api/v2/jobs/validate-cron`:
@@ -571,35 +571,35 @@ Implementation location:
   - One-off test run without creating a Job or JobExecution
   - Webhook path hits `target_url`; GitHub path dispatches workflow (requires env `GITHUB_TOKEN`)
   - Returns `200` with `{ok,type,status_code,message}`; missing GitHub token returns `200` with `ok:false`
-- Tests: `tests_fastapi/cron_tools/*`
+- Tests: `test/cron_tools/*`
 
 Phase 5A implemented:
 - Endpoint: `POST /api/v2/jobs` (DB-first; no APScheduler scheduling side-effects)
-- Tests: `tests_fastapi/jobs_write/test_create.py`
+- Tests: `test/jobs_write/test_create.py`
 
 Phase 5B implemented:
 - Endpoint: `PUT /api/v2/jobs/{id}` (DB-first; ownership enforced)
-- Tests: `tests_fastapi/jobs_write/test_update.py`
+- Tests: `test/jobs_write/test_update.py`
 
 Phase 5C implemented:
 - Endpoint: `DELETE /api/v2/jobs/{id}` (DB-first; ownership enforced)
-- Tests: `tests_fastapi/jobs_write/test_delete.py`
+- Tests: `test/jobs_write/test_delete.py`
 
 Phase 5D implemented:
 - Endpoint: `POST /api/v2/jobs/{id}/execute` (manual run; overrides not persisted; DB-first re: scheduler side-effects)
-- Tests: `tests_fastapi/jobs_write/test_execute.py`
+- Tests: `test/jobs_write/test_execute.py`
 
 Phase 5E implemented:
 - Endpoint: `POST /api/v2/jobs/bulk-upload` (CSV normalization + partial success; DB-first)
-- Tests: `tests_fastapi/jobs_write/test_bulk_upload.py`
+- Tests: `test/jobs_write/test_bulk_upload.py`
 
 Phase 5F implemented:
 - Endpoints: `POST /api/v2/jobs/validate-cron`, `POST /api/v2/jobs/cron-preview`, `POST /api/v2/jobs/test-run`
-- Tests: `tests_fastapi/cron_tools/*`
+- Tests: `test/cron_tools/*`
 
 Verified:
 ```bash
-venv/bin/python -m pytest -q tests_fastapi
+venv/bin/python -m pytest -q test
 # 108 passed
 ```
 
@@ -633,11 +633,11 @@ Complete user management + preference endpoints that are not covered by Phase 3.
 
 | Sub-Phase | Goal | Endpoints | Primary Test Location |
 |----------:|------|-----------|------------------------|
-| **6A** | Users read (admin list + self/admin get) | `GET /api/v2/auth/users`, `GET /api/v2/auth/users/{id}` | `tests_fastapi/users/test_users_read.py` ✅ |
-| **6B** | User update (self + admin controls) | `PUT /api/v2/auth/users/{id}` | `tests_fastapi/users/test_users_update.py` ✅ |
-| **6C** | User delete (admin-only + self-delete guard) | `DELETE /api/v2/auth/users/{id}` | `tests_fastapi/users/test_users_delete.py` ✅ |
-| **6D** | Notification preferences (get-or-create + update) | `GET/PUT /api/v2/auth/users/{id}/preferences` | `tests_fastapi/users/test_notification_preferences.py` ✅ |
-| **6E** | UI preferences (get-or-create + update) | `GET/PUT /api/v2/auth/users/{id}/ui-preferences` | `tests_fastapi/users/test_ui_preferences.py` ✅ |
+| **6A** | Users read (admin list + self/admin get) | `GET /api/v2/auth/users`, `GET /api/v2/auth/users/{id}` | `test/users/test_users_read.py` ✅ |
+| **6B** | User update (self + admin controls) | `PUT /api/v2/auth/users/{id}` | `test/users/test_users_update.py` ✅ |
+| **6C** | User delete (admin-only + self-delete guard) | `DELETE /api/v2/auth/users/{id}` | `test/users/test_users_delete.py` ✅ |
+| **6D** | Notification preferences (get-or-create + update) | `GET/PUT /api/v2/auth/users/{id}/preferences` | `test/users/test_notification_preferences.py` ✅ |
+| **6E** | UI preferences (get-or-create + update) | `GET/PUT /api/v2/auth/users/{id}/ui-preferences` | `test/users/test_ui_preferences.py` ✅ |
 
 ### Tasks
 
@@ -660,7 +660,7 @@ Complete user management + preference endpoints that are not covered by Phase 3.
 Implementation location:
 - `src/fastapi_app/routers/auth.py` (all Phase 6 endpoints under `/api/v2/auth/*`)
 - Models: `src/models/user.py`, `src/models/notification_preferences.py`, `src/models/ui_preferences.py`
-- Tests: `tests_fastapi/users/*`
+- Tests: `test/users/*`
 
 #### 6A — Users read
 - `GET /api/v2/auth/users` (admin-only)
@@ -669,7 +669,7 @@ Implementation location:
   - RBAC: admin can view any user; non-admin can view only self
   - Response: `{"user": User.to_dict()}`
   - Forbidden response matches Flask: `{"error": "Forbidden. You can only view your own profile."}`
-- Tests: `tests_fastapi/users/test_users_read.py`
+- Tests: `test/users/test_users_read.py`
 
 #### 6B — User update
 - `PUT /api/v2/auth/users/{id}` (JWT)
@@ -682,13 +682,13 @@ Implementation location:
     - `role` ∈ {admin,user,viewer} → 400 with `{"error":"Invalid role","message":"Role must be one of: admin, user, viewer"}`
     - Reject empty/no-op updates → 400 `{"error":"No valid fields to update"}`
   - Response: `{"message":"User updated successfully","updated_fields":[...],"user": User.to_dict()}`
-- Tests: `tests_fastapi/users/test_users_update.py`
+- Tests: `test/users/test_users_update.py`
 
 #### 6C — User delete
 - `DELETE /api/v2/auth/users/{id}` (admin-only)
   - Guard: cannot delete yourself → 400 `{"error":"Cannot delete your own account"}`
   - Response: `{"message":"User deleted successfully","deleted_user":{"id":"...","username":"..."}}`
-- Tests: `tests_fastapi/users/test_users_delete.py`
+- Tests: `test/users/test_users_delete.py`
 
 #### 6D — Notification preferences
 - `GET /api/v2/auth/users/{id}/preferences` (JWT)
@@ -701,7 +701,7 @@ Implementation location:
   - RBAC: admin any; non-admin only self
   - Partial update allowed; missing row is created if needed (matches Flask)
   - Response: `{"message":"Notification preferences updated successfully","preferences": {...}}`
-- Tests: `tests_fastapi/users/test_notification_preferences.py`
+- Tests: `test/users/test_notification_preferences.py`
 
 #### 6E — UI preferences
 - `GET /api/v2/auth/users/{id}/ui-preferences` (JWT)
@@ -712,11 +712,11 @@ Implementation location:
   - RBAC: admin any; non-admin only self
   - Requires `jobs_table_columns` object; normalizes to allowed keys (Flask default keys)
   - Response: `{"preferences":{"jobs_table_columns":{...}}}`
-- Tests: `tests_fastapi/users/test_ui_preferences.py`
+- Tests: `test/users/test_ui_preferences.py`
 
 Verified:
 ```bash
-venv/bin/python -m pytest -q tests_fastapi
+venv/bin/python -m pytest -q test
 # 146 passed
 ```
 
@@ -754,13 +754,13 @@ This phase is intentionally split by **logical API grouping** to keep each unit 
 
 | Sub-Phase | Scope | Endpoints | Primary Tests |
 |----------|-------|-----------|---------------|
-| **7A ✅** | Notifications (Read) | `GET /api/v2/notifications`, `GET /api/v2/notifications/unread-count` | `tests_fastapi/notifications/test_notifications_read.py` |
-| **7B ✅** | Notifications (Mark Read) | `PUT /api/v2/notifications/{id}/read`, `PUT /api/v2/notifications/read-all` | `tests_fastapi/notifications/test_notifications_mark_read.py` |
-| **7C ✅** | Notifications (Delete) | `DELETE /api/v2/notifications/{id}`, `DELETE /api/v2/notifications/delete-read` | `tests_fastapi/notifications/test_notifications_delete.py` |
-| **7D ✅** | Settings (Slack) | `GET /api/v2/settings/slack`, `PUT /api/v2/settings/slack` | `tests_fastapi/settings/test_slack_settings.py` |
-| **7E ✅** | Job Categories (Write) | `POST/PUT/DELETE /api/v2/job-categories` | `tests_fastapi/taxonomy_write/test_job_categories_write.py` |
-| **7F ✅** | PIC Teams (Write) | `POST/PUT/DELETE /api/v2/pic-teams` | `tests_fastapi/taxonomy_write/test_pic_teams_write.py` |
-| **7G ✅** | Utilities (Optional / Last) | Async Slack client + notifications helpers (no API) | `tests_fastapi/utils/test_slack_async.py`, `tests_fastapi/utils/test_notifications_helper.py` |
+| **7A ✅** | Notifications (Read) | `GET /api/v2/notifications`, `GET /api/v2/notifications/unread-count` | `test/notifications/test_notifications_read.py` |
+| **7B ✅** | Notifications (Mark Read) | `PUT /api/v2/notifications/{id}/read`, `PUT /api/v2/notifications/read-all` | `test/notifications/test_notifications_mark_read.py` |
+| **7C ✅** | Notifications (Delete) | `DELETE /api/v2/notifications/{id}`, `DELETE /api/v2/notifications/delete-read` | `test/notifications/test_notifications_delete.py` |
+| **7D ✅** | Settings (Slack) | `GET /api/v2/settings/slack`, `PUT /api/v2/settings/slack` | `test/settings/test_slack_settings.py` |
+| **7E ✅** | Job Categories (Write) | `POST/PUT/DELETE /api/v2/job-categories` | `test/taxonomy_write/test_job_categories_write.py` |
+| **7F ✅** | PIC Teams (Write) | `POST/PUT/DELETE /api/v2/pic-teams` | `test/taxonomy_write/test_pic_teams_write.py` |
+| **7G ✅** | Utilities (Optional / Last) | Async Slack client + notifications helpers (no API) | `test/utils/test_slack_async.py`, `test/utils/test_notifications_helper.py` |
 
 ### Detailed Plan (Per Sub-Phase)
 
@@ -869,17 +869,17 @@ This phase is intentionally split by **logical API grouping** to keep each unit 
   - Async Slack webhook sender: `src/fastapi_app/utils/slack.py`
   - Async notification creation helper: `src/fastapi_app/utils/notifications.py`
 - Tests:
-  - `tests_fastapi/utils/test_slack_async.py`
-  - `tests_fastapi/utils/test_notifications_helper.py`
+  - `test/utils/test_slack_async.py`
+  - `test/utils/test_notifications_helper.py`
 
 ### Deliverables
-- [x] Sub-phases 7A–7F implemented + tests passing (`venv/bin/python -m pytest -q tests_fastapi`)
+- [x] Sub-phases 7A–7F implemented + tests passing (`venv/bin/python -m pytest -q test`)
 - [x] Swagger updated automatically via FastAPI routers/schemas
 - [x] Feature parity with Flask for the endpoints above
 
 Verified:
 ```bash
-venv/bin/python -m pytest -q tests_fastapi
+venv/bin/python -m pytest -q test
 # 229 passed
 ```
 
@@ -913,12 +913,12 @@ Phase 8 is split to keep scheduler changes safe and reviewable. **No Phase 8 imp
 
 | Sub-Phase | Scope | Key Deliverables | Planned Tests |
 |----------|-------|------------------|--------------|
-| **8A ✅** | Scheduler core refactor (framework-agnostic) | `src/scheduler` no longer depends on Flask app context for DB work; uses `src/database/session.py` | `tests_fastapi/scheduler/test_scheduler_core.py` |
-| **8B ✅** | Single-runner guarantees | Shared atomic lock file utility with stale lock handling | `tests_fastapi/scheduler/test_scheduler_lock.py` |
-| **8C ✅** | FastAPI lifecycle integration | Start/stop APScheduler in FastAPI lifespan; expose status via health | `tests_fastapi/scheduler/test_scheduler_lifecycle.py` |
-| **8D ✅** | Job write side-effects wiring | Create/update/delete/enable/disable schedule updates (best-effort when scheduler not running in-process) | `tests_fastapi/scheduler/test_scheduler_side_effects.py` |
-| **8E ✅** | Scheduler regression tests | Timezone correctness (JST), end_date behavior, duplicate prevention | `tests_fastapi/scheduler/test_scheduler_regression.py` |
-| **8G ✅** | DB reconciliation / bootstrap | Startup DB → APScheduler resync + periodic reconciliation + operator endpoint | `tests_fastapi/scheduler/test_scheduler_resync.py` |
+| **8A ✅** | Scheduler core refactor (framework-agnostic) | `src/scheduler` no longer depends on Flask app context for DB work; uses `src/database/session.py` | `test/scheduler/test_scheduler_core.py` |
+| **8B ✅** | Single-runner guarantees | Shared atomic lock file utility with stale lock handling | `test/scheduler/test_scheduler_lock.py` |
+| **8C ✅** | FastAPI lifecycle integration | Start/stop APScheduler in FastAPI lifespan; expose status via health | `test/scheduler/test_scheduler_lifecycle.py` |
+| **8D ✅** | Job write side-effects wiring | Create/update/delete/enable/disable schedule updates (best-effort when scheduler not running in-process) | `test/scheduler/test_scheduler_side_effects.py` |
+| **8E ✅** | Scheduler regression tests | Timezone correctness (JST), end_date behavior, duplicate prevention | `test/scheduler/test_scheduler_regression.py` |
+| **8G ✅** | DB reconciliation / bootstrap | Startup DB → APScheduler resync + periodic reconciliation + operator endpoint | `test/scheduler/test_scheduler_resync.py` |
 | **8F ✅** | Cutover plan + deprecation | Frontend base URL/proxy cutover, monitoring, rollback steps | Docs + runbooks |
 
 ### Detailed Plan (Per Sub-Phase)
@@ -933,7 +933,7 @@ Phase 8 is split to keep scheduler changes safe and reviewable. **No Phase 8 imp
 
 Implemented:
 - `src/scheduler/job_executor.py` now performs DB work via `src/database/session.py` (no Flask globals); Flask-Mail email sending stays injectable for later phases.
-- Tests: `tests_fastapi/scheduler/test_scheduler_core.py`
+- Tests: `test/scheduler/test_scheduler_core.py`
 
 #### 8B — Single-runner guarantees (lock/leader election)
 - Goal: prevent multiple schedulers running in multi-process deployments.
@@ -944,7 +944,7 @@ Implemented:
 
 Implemented:
 - Shared lock utility: `src/scheduler/lock.py`
-- Tests: `tests_fastapi/scheduler/test_scheduler_lock.py`
+- Tests: `test/scheduler/test_scheduler_lock.py`
 
 #### 8C — FastAPI lifecycle integration
 - Goal: run APScheduler under FastAPI lifespan when enabled.
@@ -957,7 +957,7 @@ Implemented:
 - Scheduler runtime: `src/fastapi_app/scheduler_runtime.py`
 - FastAPI lifespan start/stop: `src/fastapi_app/main.py`
 - Health reports scheduler status: `GET /api/v2/health`
-- Tests: `tests_fastapi/scheduler/test_scheduler_lifecycle.py`
+- Tests: `test/scheduler/test_scheduler_lifecycle.py`
 
 #### 8D — Job write side-effects wiring
 - Goal: ensure job CRUD impacts the scheduler.
@@ -970,17 +970,17 @@ Implemented:
 Implemented:
 - Best-effort scheduler helpers: `src/fastapi_app/scheduler_side_effects.py`
 - Wired into job write endpoints: `src/fastapi_app/routers/jobs.py` (create/update/delete + bulk upload)
-- Tests: `tests_fastapi/scheduler/test_scheduler_side_effects.py`
+- Tests: `test/scheduler/test_scheduler_side_effects.py`
 
 #### 8E — Scheduler regression tests
-- Add scheduler test suite under `tests_fastapi/scheduler/`:
+- Add scheduler test suite under `test/scheduler/`:
   - Lock/leader election behavior (single runner)
   - Side-effects only when scheduler enabled + leader
   - Timezone correctness (JST cron)
   - No duplicate schedules
 
 Implemented:
-- Regression coverage: `tests_fastapi/scheduler/test_scheduler_regression.py`
+- Regression coverage: `test/scheduler/test_scheduler_regression.py`
 
 #### 8G — DB reconciliation / bootstrap (Flask parity)
 - Goal: ensure scheduled jobs produce execution rows even after restarts/cutover (no “touch job to schedule” requirement).
@@ -996,14 +996,14 @@ Implemented:
 - Admin endpoints:
   - `GET /api/v2/scheduler/status`
   - `POST /api/v2/scheduler/resync`
-- Tests: `tests_fastapi/scheduler/test_scheduler_resync.py`
+- Tests: `test/scheduler/test_scheduler_resync.py`
 
 #### 8F — Cutover plan + deprecation
 
 **Goal:** Make FastAPI (`/api/v2`) the default production API and migrate scheduler ownership from Flask → FastAPI safely, with a clear rollback path. This sub-phase is primarily **runbook/documentation** plus a deployment checklist.
 
 ##### Cutover Preconditions (Must be true before switching traffic)
-- `venv/bin/python -m pytest -q tests_fastapi` is green (CI or locally).
+- `venv/bin/python -m pytest -q test` is green (CI or locally).
 - FastAPI is deployed with the same `SECRET_KEY`/`JWT_SECRET_KEY` as Flask (tokens remain compatible).
 - Database URLs are correct:
   - If using a **single shared DB**, ensure both Flask and FastAPI point at the same DB during cutover.
@@ -1075,7 +1075,7 @@ Implemented (documentation/runbook):
 - This section (8F) defines the cutover/rollback/deprecation checklist.
 
 ### Validation & Regression
-- FastAPI suite (must pass): `venv/bin/python -m pytest -q tests_fastapi`
+- FastAPI suite (must pass): `venv/bin/python -m pytest -q test`
 - Legacy Flask suite (target to pass by Phase 8 end): `venv/bin/python -m pytest -q test`
 
 ### Frontend Changes Required
@@ -1126,7 +1126,7 @@ Local cutover execution (2025-12-24):
   - Created PIC team + created job + manual execute -> execution row created
 
 Current local test status:
-- FastAPI: `venv/bin/python -m pytest -q tests_fastapi` -> 229 passed
+- FastAPI: `venv/bin/python -m pytest -q test` -> 229 passed
 - Flask (legacy): `venv/bin/python -m pytest -q test` -> failing (see pytest output)
 ```
 
@@ -1198,7 +1198,7 @@ src/
 | Database conflicts | High | Medium | Single DB, careful session management, test transactions |
 | Scheduler race conditions | High | Medium | Keep scheduler on Flask until Phase 8, lock mechanism |
 | Frontend breaking | Medium | Low | Version API as `/api/v2/`, gradual frontend switch |
-| Test coverage gaps | Medium | Medium | Run `tests_fastapi/` and validate key UI flows |
+| Test coverage gaps | Medium | Medium | Run `test/` and validate key UI flows |
 | Performance regression | Medium | Low | Benchmark before/after migration |
 
 ---
@@ -2269,22 +2269,22 @@ Read endpoints were migrated in Phase 4E; write endpoints were added in Phase 7E
 
 | Phase | Area | Tests | Status |
 |------:|------|-------|--------|
-| 1 | App bootstrap + health + OpenAPI smoke | `tests_fastapi/core/test_health.py` | ✅ |
-| 2 | Async DB session + model compatibility | `tests_fastapi/database/test_async_session.py` | ✅ |
-| 3 | Auth flows + cross-stack JWT | `tests_fastapi/auth/*` | ✅ |
+| 1 | App bootstrap + health + OpenAPI smoke | `test/core/test_health.py` | ✅ |
+| 2 | Async DB session + model compatibility | `test/database/test_async_session.py` | ✅ |
+| 3 | Auth flows + cross-stack JWT | `test/auth/*` | ✅ |
 
 ### Phase 4: Automated FastAPI Endpoint Coverage
 
 | Sub-phase | Area | Tests | Status |
 |----------:|------|-------|--------|
-| 4B | Jobs (read) | `tests_fastapi/jobs/test_jobs_read.py` | ✅ |
-| 4C | Job executions (read) | `tests_fastapi/executions/test_job_executions_read.py` | ✅ |
-| 4D | Executions (read) | `tests_fastapi/executions/test_executions_global_read.py` | ✅ |
-| 4E | Taxonomy (read) | `tests_fastapi/taxonomy/test_taxonomy_read.py` | ✅ |
+| 4B | Jobs (read) | `test/jobs/test_jobs_read.py` | ✅ |
+| 4C | Job executions (read) | `test/executions/test_job_executions_read.py` | ✅ |
+| 4D | Executions (read) | `test/executions/test_executions_global_read.py` | ✅ |
+| 4E | Taxonomy (read) | `test/taxonomy/test_taxonomy_read.py` | ✅ |
 
 Run the FastAPI-only suite:
 ```bash
-venv/bin/python -m pytest -q tests_fastapi
+venv/bin/python -m pytest -q test
 ```
 
 ### Phase 3: Cross-Stack Token Compatibility
@@ -2350,13 +2350,13 @@ diff <(echo "$flask_response" | jq -S '.jobs | sort_by(.id)') \
 
 | Sub-phase | Area | Tests | Status |
 |----------:|------|-------|--------|
-| 7A | Notifications (read) | `tests_fastapi/notifications/test_notifications_read.py` | ✅ |
-| 7B | Notifications (mark read) | `tests_fastapi/notifications/test_notifications_mark_read.py` | ✅ |
-| 7C | Notifications (delete) | `tests_fastapi/notifications/test_notifications_delete.py` | ✅ |
-| 7D | Slack settings | `tests_fastapi/settings/test_slack_settings.py` | ✅ |
-| 7E | Job categories (write) | `tests_fastapi/taxonomy_write/test_job_categories_write.py` | ✅ |
-| 7F | PIC teams (write) | `tests_fastapi/taxonomy_write/test_pic_teams_write.py` | ✅ |
-| 7G | Utilities | `tests_fastapi/utils/*` | ✅ |
+| 7A | Notifications (read) | `test/notifications/test_notifications_read.py` | ✅ |
+| 7B | Notifications (mark read) | `test/notifications/test_notifications_mark_read.py` | ✅ |
+| 7C | Notifications (delete) | `test/notifications/test_notifications_delete.py` | ✅ |
+| 7D | Slack settings | `test/settings/test_slack_settings.py` | ✅ |
+| 7E | Job categories (write) | `test/taxonomy_write/test_job_categories_write.py` | ✅ |
+| 7F | PIC teams (write) | `test/taxonomy_write/test_pic_teams_write.py` | ✅ |
+| 7G | Utilities | `test/utils/*` | ✅ |
 
 ### Phase 8: Scheduler Tests
 

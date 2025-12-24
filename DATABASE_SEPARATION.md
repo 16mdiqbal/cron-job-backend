@@ -10,7 +10,7 @@ This backend is **FastAPI-only** and uses SQLAlchemy with a SQLite default. You 
 
 Notes:
 - For SQLite, the async engine uses `sqlite+aiosqlite:///...` internally.
-- In `tests_fastapi/`, tests use a **per-test temporary SQLite DB** via fixtures (no shared `cron_jobs.db` access).
+- In `test/`, tests use a **per-test temporary SQLite DB** via fixtures (no shared `cron_jobs.db` access).
 
 ## Initializing the DB
 To create tables (and run the lightweight SQLite schema guard), run:

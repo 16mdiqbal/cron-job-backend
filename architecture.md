@@ -49,5 +49,5 @@ The primary API surface is served under **`/api/v2/*`**.
 - `POST /api/v2/scheduler/resync` (admin only)
 
 ## Testing
-- FastAPI tests live in `tests_fastapi/` and run against a per-test temporary SQLite DB.
+- FastAPI tests live in `test/` and run against a per-test temporary SQLite DB.
 

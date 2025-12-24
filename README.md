@@ -59,7 +59,7 @@ cron-job-backend/
 │       └── job_executor.py # Job execution functions
 │   └── instance/          # SQLite database directory (default)
 │       └── cron_jobs.db
-├── tests_fastapi/          # FastAPI test suite
+├── test/          # FastAPI test suite
 ├── venv/                  # Python virtual environment
 ├── create_admin.py        # Script to create initial admin user
 ├── requirements.txt       # Python dependencies
@@ -80,7 +80,7 @@ cron-job-backend/
 
 **Directory Organization:**
 - **src/** - All application source code
-- **tests_fastapi/** - FastAPI pytest suite
+- **test/** - FastAPI pytest suite
 - **src/instance/** - Runtime data and databases
 - **venv/** - Python virtual environment
 
