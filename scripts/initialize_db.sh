@@ -20,7 +20,7 @@ fi
 
 # Run the initialization script
 echo "Running initialization script..."
-python create_admin.py
+python scripts/create_admin.py
 
 echo ""
 echo "=========================================="

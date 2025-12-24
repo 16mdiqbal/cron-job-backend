@@ -2,8 +2,8 @@
 Create an initial admin user for the application (FastAPI-only).
 
 Usage:
-  venv/bin/python create_admin.py
-  ADMIN_USERNAME=admin ADMIN_PASSWORD=admin123 venv/bin/python create_admin.py
+  venv/bin/python scripts/create_admin.py
+  ADMIN_USERNAME=admin ADMIN_PASSWORD=admin123 venv/bin/python scripts/create_admin.py
 """
 
 import os
@@ -47,4 +47,3 @@ def create_admin() -> bool:
 
 if __name__ == "__main__":
     create_admin()
-

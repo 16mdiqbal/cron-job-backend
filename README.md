@@ -61,7 +61,7 @@ cron-job-backend/
 │       └── cron_jobs.db
 ├── test/          # FastAPI test suite
 ├── venv/                  # Python virtual environment
-├── create_admin.py        # Script to create initial admin user
+├── scripts/create_admin.py # Script to create initial admin user
 ├── requirements.txt       # Python dependencies
 ├── pytest.ini             # Pytest configuration
 ├── .env                   # Environment variables (git-ignored)
@@ -166,7 +166,7 @@ cp .env.example .env
 
 ```bash
 # Create the default admin account
-python create_admin.py
+python scripts/create_admin.py
 
 # Default credentials (CHANGE THESE IN PRODUCTION):
 # Username: admin
