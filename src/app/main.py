@@ -8,6 +8,8 @@ This module initializes the FastAPI application with:
 - Swagger/OpenAPI documentation
 """
 
+import logging
+import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 
@@ -18,6 +20,8 @@ from fastapi.responses import JSONResponse
 
 from .config import get_settings
 from .schemas import HealthResponse, ErrorResponse
+
+logger = logging.getLogger(__name__)
 
 
 # OpenAPI Tags for documentation organization
@@ -84,6 +88,39 @@ async def lifespan(app: FastAPI):
     print(f"🚀 Starting {settings.app_name} v{settings.app_version}")
     print(f"📚 API Documentation available at: http://{settings.host}:{settings.port}/docs")
     print(f"📖 ReDoc available at: http://{settings.host}:{settings.port}/redoc")
+
+    try:
+        from sqlalchemy.engine.url import make_url
+
+        from ..database.engine import get_database_url
+
+        def _safe_db_ref(url: str) -> str:
+            parsed = make_url(url)
+            driver = parsed.drivername
+            if driver.startswith("sqlite"):
+                return parsed.database or "<memory>"
+            host = parsed.host or ""
+            port = f":{parsed.port}" if parsed.port else ""
+            db = parsed.database or ""
+            user = f"{parsed.username}@" if parsed.username else ""
+            return f"{driver}://{user}{host}{port}/{db}"
+
+        sync_url = get_database_url(async_mode=False)
+        async_url = get_database_url(async_mode=True)
+        print(f"🗄️  DB (sync):  {_safe_db_ref(sync_url)}")
+        print(f"🗄️  DB (async): {_safe_db_ref(async_url)}")
+
+        env_sync = (os.getenv("DATABASE_URL") or "").strip()
+        env_async = (os.getenv("FASTAPI_DATABASE_URL") or "").strip()
+        if env_sync and env_async and env_sync != env_async:
+            logger.warning(
+                "DATABASE_URL and FASTAPI_DATABASE_URL differ. This can make executions appear to 'disappear' "
+                "(scheduler writes to one DB while the API reads from another)."
+            )
+        if settings.testing:
+            logger.warning("TESTING=true: FastAPI may use an isolated DB (fastapi_test.db).")
+    except Exception:
+        pass
 
     # Ensure DB schema + baseline seed data exists before scheduler starts.
     from ..database.bootstrap import init_db

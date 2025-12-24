@@ -51,6 +51,8 @@ cron-job-backend/
 │   ├── database/
 │   │   ├── DATABASE_SCHEMA_MYSQL.sql
 │   │   └── DATABASE_SEPARATION.md
+│   ├── EDUCATION.md
+│   ├── MINDMAP.md
 │   └── migration/
 │       └── FASTAPI_MIGRATION_PLAN.md
 ├── extras/

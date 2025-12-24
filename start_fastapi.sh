@@ -45,6 +45,9 @@ export SCHEDULER_ENABLED=${SCHEDULER_ENABLED:-true}
 export TESTING=${TESTING:-false}
 mkdir -p "$SCRIPT_DIR/src/instance"
 export SCHEDULER_LOCK_PATH=${SCHEDULER_LOCK_PATH:-"$SCRIPT_DIR/src/instance/scheduler.lock"}
+DB_FILE="${SCRIPT_DIR}/src/instance/cron_jobs.db"
+export DATABASE_URL=${DATABASE_URL:-"sqlite:///${DB_FILE}"}
+export FASTAPI_DATABASE_URL=${FASTAPI_DATABASE_URL:-"${DATABASE_URL}"}
 
 # Check if port is already in use
 if lsof -Pi :$PORT -sTCP:LISTEN -t >/dev/null 2>&1; then
