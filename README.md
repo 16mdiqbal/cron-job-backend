@@ -70,7 +70,7 @@ cron-job-backend/
 ├── FOLDER_STRUCTURE.md    # Detailed folder structure documentation
 ├── TESTING_GUIDE.md       # Comprehensive testing guide
 ├── REORGANIZATION_SUMMARY.md # Project reorganization details
-├── DATABASE_SCHEMA_MYSQL.sql # MySQL database schema
+├── docs/database/DATABASE_SCHEMA_MYSQL.sql # MySQL database schema
 ├── MYSQL_SETUP_GUIDE.md   # MySQL setup and configuration
 ├── MYSQL_CONFIG_REFERENCE.md # MySQL configuration examples
 ├── MYSQL_DATABASE_SETUP.md   # MySQL database setup overview
@@ -238,9 +238,9 @@ To use MySQL in production:
    ```
 
 2. **Create Database:**
-   See [DATABASE_SCHEMA_MYSQL.sql](DATABASE_SCHEMA_MYSQL.sql) for complete schema.
+   See [`docs/database/DATABASE_SCHEMA_MYSQL.sql`](docs/database/DATABASE_SCHEMA_MYSQL.sql) for complete schema.
    ```bash
-   mysql -u root -p < DATABASE_SCHEMA_MYSQL.sql
+   mysql -u root -p < docs/database/DATABASE_SCHEMA_MYSQL.sql
    ```
 
 3. **Configure Connection:**
