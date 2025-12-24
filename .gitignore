@@ -61,6 +61,7 @@ seed_jobs.py
 vite.log
 logs/
 fastapi*.log
+*.log
 
 # Local dev artifacts
 *.pid
