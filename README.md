@@ -100,13 +100,9 @@ source venv/bin/activate
 ```
 
 ### 2. Install Dependencies
-
+ 
 ```bash
-# Runtime dependencies
 pip install -r requirements.txt
-
-# Dev/test dependencies
-pip install -r requirements-dev.txt
 ```
 
 **Environment Variables:**
