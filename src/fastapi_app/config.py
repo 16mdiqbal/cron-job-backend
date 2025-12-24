@@ -47,6 +47,16 @@ class Settings(BaseSettings):
     
     def model_post_init(self, __context):
         """Post-initialization hook to check environment variables."""
+        # Allow `start_fastapi.sh` to override host/port via FASTAPI_* vars.
+        # (Keeps printed URLs and docs_url consistent with the uvicorn args.)
+        if os.getenv("FASTAPI_HOST"):
+            self.host = os.getenv("FASTAPI_HOST") or self.host
+        if os.getenv("FASTAPI_PORT"):
+            try:
+                self.port = int(os.getenv("FASTAPI_PORT") or self.port)
+            except ValueError:
+                pass
+
         # Check for testing mode from environment
         if os.getenv('TESTING', '').lower() in ('true', '1', 'yes'):
             self.testing = True
