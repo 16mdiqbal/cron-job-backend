@@ -16,6 +16,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
 
 from .config import get_settings
 from ..scheduler import scheduler as _scheduler
@@ -59,6 +60,22 @@ def _get_scheduler() -> BackgroundScheduler:
     return _scheduler
 
 
+def _ensure_end_date_maintenance_job(scheduler: BackgroundScheduler, tz: ZoneInfo) -> None:
+    try:
+        from ..services.end_date_maintenance import run_end_date_maintenance
+
+        scheduler.add_job(
+            func=run_end_date_maintenance,
+            trigger=CronTrigger(day_of_week="mon", hour=9, minute=0, timezone=tz),
+            id="end_date_maintenance",
+            name="End date maintenance",
+            replace_existing=True,
+        )
+    except Exception:
+        # Never fail scheduler startup due to a maintenance job.
+        pass
+
+
 def start_scheduler() -> bool:
     """
     Attempt to start the scheduler in this process.
@@ -69,6 +86,12 @@ def start_scheduler() -> bool:
     scheduler = _get_scheduler()
     if scheduler.running:
         _is_leader = True
+        try:
+            settings = get_settings()
+            tz = ZoneInfo(settings.scheduler_timezone)
+        except Exception:
+            tz = ZoneInfo("UTC")
+        _ensure_end_date_maintenance_job(scheduler, tz)
         return True
 
     settings = get_settings()
@@ -90,11 +113,14 @@ def start_scheduler() -> bool:
 
     # Keep scheduler config minimal for Phase 8C (no jobstore wiring yet).
     try:
-        scheduler.configure(timezone=ZoneInfo(settings.scheduler_timezone))
+        tz = ZoneInfo(settings.scheduler_timezone)
     except Exception:
-        scheduler.configure(timezone=ZoneInfo("UTC"))
+        tz = ZoneInfo("UTC")
+
+    scheduler.configure(timezone=tz)
 
     scheduler.start()
+    _ensure_end_date_maintenance_job(scheduler, tz)
 
     # Flask parity: bootstrap schedules from DB and keep them reconciled.
     try:
@@ -133,7 +159,17 @@ def stop_scheduler() -> None:
 def get_status() -> SchedulerStatus:
     scheduler = _get_scheduler()
     running = bool(getattr(scheduler, "running", False))
-    count = len(scheduler.get_jobs()) if running else 0
+    if not running:
+        count = 0
+    else:
+        jobs = scheduler.get_jobs()
+        try:
+            from .scheduler_reconcile import _RESERVED_JOB_IDS
+
+            jobs = [j for j in jobs if str(j.id) not in _RESERVED_JOB_IDS]
+        except Exception:
+            pass
+        count = len(jobs)
     return SchedulerStatus(running=running, is_leader=_is_leader and running, scheduled_jobs_count=count)
 
 

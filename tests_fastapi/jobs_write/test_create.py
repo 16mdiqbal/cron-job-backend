@@ -5,26 +5,24 @@ import pytest
 
 
 @pytest.fixture
-def seed_team_and_category(app, setup_test_db):
-    with app.app_context():
-        from src.models import db
-        from src.models.job_category import JobCategory
-        from src.models.pic_team import PicTeam
+def seed_team_and_category(db_session, setup_test_db):
+    from src.models.job_category import JobCategory
+    from src.models.pic_team import PicTeam
 
-        team = PicTeam(slug="team-a", name="Team A", slack_handle="@team-a", is_active=True)
-        disabled_team = PicTeam(slug="team-b", name="Team B", slack_handle="@team-b", is_active=False)
+    team = PicTeam(slug="team-a", name="Team A", slack_handle="@team-a", is_active=True)
+    disabled_team = PicTeam(slug="team-b", name="Team B", slack_handle="@team-b", is_active=False)
 
-        category = JobCategory(slug="maintenance", name="Maintenance Jobs", is_active=True)
+    category = JobCategory(slug="maintenance", name="Maintenance Jobs", is_active=True)
 
-        db.session.add_all([team, disabled_team, category])
-        db.session.commit()
+    db_session.add_all([team, disabled_team, category])
+    db_session.commit()
 
-        return {
-            "team_slug": team.slug,
-            "disabled_team_slug": disabled_team.slug,
-            "category_slug": category.slug,
-            "category_name": category.name,
-        }
+    return {
+        "team_slug": team.slug,
+        "disabled_team_slug": disabled_team.slug,
+        "category_slug": category.slug,
+        "category_name": category.name,
+    }
 
 
 def _today_jst_str() -> str:

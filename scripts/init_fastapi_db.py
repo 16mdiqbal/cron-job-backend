@@ -1,91 +1,40 @@
 #!/usr/bin/env python3
 """
-Initialize FastAPI database with the same schema as Flask.
+Initialize the database schema for the FastAPI backend (FastAPI-only).
 
-This creates a separate database for FastAPI during migration to avoid
-Flask scheduler interference during tests.
+This runs `Base.metadata.create_all()` plus lightweight SQLite schema guards.
+
+Examples:
+  ./scripts/init_fastapi_db.py
+  DATABASE_URL=sqlite:////tmp/cron_jobs.db ./scripts/init_fastapi_db.py
+  ./scripts/init_fastapi_db.py --database-url sqlite:////tmp/fastapi_test.db --testing
 """
 
+import argparse
 import os
-import sys
-
-# Add parent directory to path
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-from src.models import db
-from src.app import create_app
-
-# Set testing mode
-os.environ['TESTING'] = 'true'
-os.environ['SCHEDULER_ENABLED'] = 'false'
 
 
-def init_fastapi_database():
-    """Initialize FastAPI database with the same schema."""
-    # Create Flask app to get database models
-    app = create_app()
-    
-    # Override database path for FastAPI
-    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    fastapi_db_path = os.path.join(base_dir, 'src', 'instance', 'fastapi_cron_jobs.db')
-    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{fastapi_db_path}'
-    
-    print(f"Initializing FastAPI database at: {fastapi_db_path}")
-    
-    with app.app_context():
-        # Drop existing tables
-        db.drop_all()
-        print("  Dropped existing tables")
-        
-        # Create all tables
-        db.create_all()
-        print("  Created all tables")
-        
-        # Verify tables created
-        from sqlalchemy import inspect
-        inspector = inspect(db.engine)
-        tables = inspector.get_table_names()
-        print(f"  Tables created: {', '.join(tables)}")
-    
-    print("\n✅ FastAPI database initialized successfully!")
-    print(f"   Location: {fastapi_db_path}")
-    print("\nNote: This database is separate from Flask's database during migration.")
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Initialize DB schema for FastAPI.")
+    parser.add_argument("--database-url", help="SQLAlchemy database URL (overrides env)")
+    parser.add_argument("--testing", action="store_true", help="Set TESTING=true and disable scheduler")
+    args = parser.parse_args()
+
+    os.environ.setdefault("SCHEDULER_ENABLED", "false")
+    if args.testing:
+        os.environ["TESTING"] = "true"
+
+    if args.database_url:
+        os.environ["DATABASE_URL"] = args.database_url
+        os.environ["FASTAPI_DATABASE_URL"] = args.database_url
+
+    from src.database.bootstrap import init_db
+
+    init_db()
+    print("✅ Database initialized successfully.")
+    print(f"   DATABASE_URL={os.environ.get('DATABASE_URL')}")
 
 
-def init_test_database():
-    """Initialize test database for FastAPI tests."""
-    # Create Flask app to get database models
-    app = create_app()
-    
-    # Override database path for FastAPI tests
-    base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-    test_db_path = os.path.join(base_dir, 'src', 'instance', 'fastapi_test.db')
-    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{test_db_path}'
-    
-    print(f"\nInitializing FastAPI test database at: {test_db_path}")
-    
-    with app.app_context():
-        # Drop existing tables
-        db.drop_all()
-        
-        # Create all tables
-        db.create_all()
-        print("  ✅ Test database initialized")
-    
-    return test_db_path
+if __name__ == "__main__":
+    main()
 
-
-if __name__ == '__main__':
-    print("=" * 70)
-    print("FastAPI Database Initialization")
-    print("=" * 70)
-    
-    # Initialize main FastAPI database
-    init_fastapi_database()
-    
-    # Initialize test database
-    init_test_database()
-    
-    print("\n" + "=" * 70)
-    print("Both databases are now ready for FastAPI migration!")
-    print("=" * 70)

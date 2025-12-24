@@ -5,6 +5,8 @@
 > **Created:** December 21, 2025  
 > **Estimated Duration:** 30 working days (~6 weeks)
 
+> **Status (Cutover):** ✅ Migration completed — FastAPI is the only backend and Flask code has been removed.
+
 ---
 
 ## Table of Contents
@@ -233,8 +235,7 @@ Updated:
 - src/fastapi_app/dependencies/database.py (uses new session module)
 
 Verification:
-- Flask health check: http://localhost:5001/api/health ✅
-- FastAPI health check: http://localhost:8001/api/v2/health ✅
+- FastAPI health check: http://localhost:5001/api/v2/health ✅
 - All schemas import successfully ✅
 - Database module imports successfully ✅
 ```
@@ -1197,7 +1198,7 @@ src/
 | Database conflicts | High | Medium | Single DB, careful session management, test transactions |
 | Scheduler race conditions | High | Medium | Keep scheduler on Flask until Phase 8, lock mechanism |
 | Frontend breaking | Medium | Low | Version API as `/api/v2/`, gradual frontend switch |
-| Test coverage gaps | Medium | Medium | Run Flask tests against FastAPI endpoints |
+| Test coverage gaps | Medium | Medium | Run `tests_fastapi/` and validate key UI flows |
 | Performance regression | Medium | Low | Benchmark before/after migration |
 
 ---
@@ -1213,7 +1214,7 @@ src/
 | 5 | Job CRUD operations work end-to-end (FastAPI) | ✅ |
 | 6 | Full auth flow on FastAPI only | ✅ |
 | 7 | All Phase 7 endpoints migrated + tested | ✅ |
-| 8 | Flask removed, all tests pass | ⬜ |
+| 8 | Flask removed, all tests pass | ✅ |
 
 ---
 
@@ -1228,7 +1229,7 @@ src/
 | 5 | Jobs CRUD | 5 days | - | - | ✅ |
 | 6 | User Management | 4 days | - | - | ✅ |
 | 7 | Notifications & Settings | 3 days | - | - | ✅ |
-| 8 | Cutover | 6 days | - | - | ⬜ |
+| 8 | Cutover | 6 days | - | - | ✅ |
 | **Total** | | **30 days** | | | |
 
 ---
@@ -1283,38 +1284,28 @@ source venv/bin/activate  # macOS/Linux
 ### Step 1: Install Dependencies
 
 ```bash
-# Install Flask + FastAPI dependencies
+# Install FastAPI dependencies
 pip install -r requirements.txt
 ```
 
-### Step 2: Run Dual-Stack Locally
+### Step 2: Run Locally
 
-**Terminal 1 - Flask (Port 5001):**
-```bash
-cd /path/to/cron-job-backend
-source venv/bin/activate
-./start_server.sh
-```
-
-**Terminal 2 - FastAPI (Port 8001):**
+**Terminal 1 - FastAPI (Port 5001 default):**
 ```bash
 cd /path/to/cron-job-backend
 source venv/bin/activate
 ./start_fastapi.sh
-# Or: uvicorn src.fastapi_app.main:app --reload --port 8001
+# Or: uvicorn src.fastapi_app.main:app --reload --port 5001
 ```
 
-### Step 3: Verify Both Running
+### Step 3: Verify
 
 ```bash
-# Flask health check
-curl http://localhost:5001/api/health
-
 # FastAPI health check
-curl http://localhost:8001/api/v2/health
+curl http://localhost:5001/api/v2/health
 
 # FastAPI OpenAPI docs
-open http://localhost:8001/docs
+open http://localhost:5001/docs
 ```
 
 ### Step 4: Proxy Configuration (Optional)
@@ -2403,14 +2394,14 @@ diff <(echo "$flask_response" | jq -S '.jobs | sort_by(.id)') \
 
 **Rollback Steps:**
 ```bash
-# 1. Stop both servers
-pkill -f "flask" && pkill -f "uvicorn"
+# 1. Stop FastAPI server
+pkill -f "uvicorn"
 
 # 2. Restore database from backup
 cp src/instance/cron_jobs.db.backup src/instance/cron_jobs.db
 
-# 3. Restart Flask only
-./start_server.sh
+# 3. Restart FastAPI
+./start_fastapi.sh
 ```
 
 **Prevention:** Take database backup before each phase:

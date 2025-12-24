@@ -17,21 +17,13 @@ from ..models.user import User
 
 logger = logging.getLogger(__name__)
 
-_flask_app = None
-
-
-def set_flask_app(app):
-    global _flask_app
-    _flask_app = app
-
 
 @dataclass(frozen=True)
 class EmailCallbacks:
     """
     Optional callbacks for email notifications.
 
-    The current email implementation uses Flask-Mail and requires an app context,
-    so scheduler execution keeps email hooks injectable for Phase 8 migration.
+    Scheduler execution keeps email hooks injectable for tests/alternatives.
     """
 
     send_failure: Optional[Callable[[str, str, str, list[str]], bool]] = None
@@ -129,44 +121,6 @@ def _notify_auto_paused_expired_job(session: Session, *, job: Job, today_jst: da
     session.commit()
 
 
-def execute_job_with_app_context(job_id, job_name, job_config):
-    """
-    APScheduler entrypoint that ensures a Flask app context exists.
-
-    DB work no longer requires an app context, but Flask-Mail email notifications
-    still do, so this wrapper remains during migration.
-    """
-    if _flask_app is None:
-        raise RuntimeError("Flask app not set for scheduler. Call set_flask_app(app) during startup.")
-    with _flask_app.app_context():
-        from ..utils.email import send_job_failure_notification, send_job_success_notification
-
-        execute_job(
-            job_id,
-            job_name,
-            job_config,
-            trigger_type="scheduled",
-            scheduler_timezone=_flask_app.config.get("SCHEDULER_TIMEZONE", _get_scheduler_timezone_name()),
-            email_callbacks=EmailCallbacks(
-                send_failure=send_job_failure_notification,
-                send_success=send_job_success_notification,
-            ),
-        )
-
-
-def run_end_date_maintenance_with_app_context():
-    """
-    APScheduler entrypoint for weekly end_date reminders / auto-pause.
-    """
-    if _flask_app is None:
-        raise RuntimeError("Flask app not set for scheduler. Call set_flask_app(app) during startup.")
-    with _flask_app.app_context():
-        from ..services.end_date_maintenance import run_end_date_maintenance
-        from ..scheduler import scheduler  # local import to avoid cycles
-
-        run_end_date_maintenance(_flask_app, scheduler=scheduler)
-
-
 def execute_job(
     job_id,
     job_name,
@@ -184,6 +138,14 @@ def execute_job(
     2. Generic webhook call (if target_url provided)
     """
     try:
+        if email_callbacks is None:
+            from ..utils.email import send_job_failure_notification, send_job_success_notification
+
+            email_callbacks = EmailCallbacks(
+                send_failure=send_job_failure_notification,
+                send_success=send_job_success_notification,
+            )
+
         tz_name = (scheduler_timezone or _get_scheduler_timezone_name()).strip() or _get_scheduler_timezone_name()
         scheduler_tz = _get_scheduler_timezone(tz_name)
         logger.info("Executing job '%s' (ID: %s) at %s", job_name, job_id, datetime.now(timezone.utc).isoformat())

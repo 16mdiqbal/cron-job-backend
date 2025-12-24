@@ -9,33 +9,31 @@ def _today_jst():
 
 
 @pytest.fixture
-def seed_bulk_upload_refs(app, setup_test_db):
-    with app.app_context():
-        from src.models import db
-        from src.models.job import Job
-        from src.models.job_category import JobCategory
-        from src.models.pic_team import PicTeam
+def seed_bulk_upload_refs(db_session, setup_test_db):
+    from src.models.job import Job
+    from src.models.job_category import JobCategory
+    from src.models.pic_team import PicTeam
 
-        category = JobCategory(slug="maintenance", name="Maintenance Jobs", is_active=True)
-        team = PicTeam(slug="team-a", name="Team A", slack_handle="@team-a", is_active=True)
-        db.session.add_all([category, team])
-        db.session.flush()
+    category = JobCategory(slug="maintenance", name="Maintenance Jobs", is_active=True)
+    team = PicTeam(slug="team-a", name="Team A", slack_handle="@team-a", is_active=True)
+    db_session.add_all([category, team])
+    db_session.flush()
 
-        user = setup_test_db["user"]
-        existing = Job(
-            name="existing-job",
-            cron_expression="0 * * * *",
-            category=category.slug,
-            end_date=_today_jst(),
-            pic_team=team.slug,
-            created_by=user.id,
-            target_url="https://example.com/hook",
-            is_active=True,
-        )
-        db.session.add(existing)
-        db.session.commit()
+    user = setup_test_db["user"]
+    existing = Job(
+        name="existing-job",
+        cron_expression="0 * * * *",
+        category=category.slug,
+        end_date=_today_jst(),
+        pic_team=team.slug,
+        created_by=user.id,
+        target_url="https://example.com/hook",
+        is_active=True,
+    )
+    db_session.add(existing)
+    db_session.commit()
 
-        return {"category_slug": category.slug, "team_slug": team.slug}
+    return {"category_slug": category.slug, "team_slug": team.slug}
 
 
 def _csv_bytes(text: str) -> bytes:

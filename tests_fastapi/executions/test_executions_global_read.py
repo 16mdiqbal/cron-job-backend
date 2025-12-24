@@ -4,67 +4,65 @@ import pytest
 
 
 @pytest.fixture
-def seed_global_executions(app, setup_test_db):
-    with app.app_context():
-        from src.models import db
-        from src.models.job import Job
-        from src.models.job_execution import JobExecution
+def seed_global_executions(db_session, setup_test_db):
+    from src.models.job import Job
+    from src.models.job_execution import JobExecution
 
-        user = setup_test_db["user"]
+    user = setup_test_db["user"]
 
-        job_1 = Job(
-            name="job-global-1",
-            cron_expression="0 * * * *",
-            category="general",
-            created_by=user.id,
-            github_repo="repo-1",
-            is_active=True,
-        )
-        job_2 = Job(
-            name="job-global-2",
-            cron_expression="15 * * * *",
-            category="general",
-            created_by=user.id,
-            target_url="https://example.com/hook",
-            is_active=True,
-        )
-        db.session.add_all([job_1, job_2])
-        db.session.flush()
+    job_1 = Job(
+        name="job-global-1",
+        cron_expression="0 * * * *",
+        category="general",
+        created_by=user.id,
+        github_repo="repo-1",
+        is_active=True,
+    )
+    job_2 = Job(
+        name="job-global-2",
+        cron_expression="15 * * * *",
+        category="general",
+        created_by=user.id,
+        target_url="https://example.com/hook",
+        is_active=True,
+    )
+    db_session.add_all([job_1, job_2])
+    db_session.flush()
 
-        exec_1 = JobExecution(
-            job_id=job_1.id,
-            status="success",
-            trigger_type="manual",
-            execution_type="github_actions",
-            started_at=datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
-            duration_seconds=10.0,
-        )
-        exec_2 = JobExecution(
-            job_id=job_1.id,
-            status="failed",
-            trigger_type="scheduled",
-            execution_type="github_actions",
-            started_at=datetime(2025, 1, 2, 0, 0, 0, tzinfo=timezone.utc),
-            duration_seconds=20.0,
-        )
-        exec_3 = JobExecution(
-            job_id=job_2.id,
-            status="running",
-            trigger_type="manual",
-            execution_type="webhook",
-            started_at=datetime(2025, 1, 3, 0, 0, 0, tzinfo=timezone.utc),
-        )
+    exec_1 = JobExecution(
+        job_id=job_1.id,
+        status="success",
+        trigger_type="manual",
+        execution_type="github_actions",
+        started_at=datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+        duration_seconds=10.0,
+    )
+    exec_2 = JobExecution(
+        job_id=job_1.id,
+        status="failed",
+        trigger_type="scheduled",
+        execution_type="github_actions",
+        started_at=datetime(2025, 1, 2, 0, 0, 0, tzinfo=timezone.utc),
+        duration_seconds=20.0,
+    )
+    exec_3 = JobExecution(
+        job_id=job_2.id,
+        status="running",
+        trigger_type="manual",
+        execution_type="webhook",
+        started_at=datetime(2025, 1, 3, 0, 0, 0, tzinfo=timezone.utc),
+    )
 
-        db.session.add_all([exec_1, exec_2, exec_3])
-        db.session.commit()
+    db_session.add_all([exec_1, exec_2, exec_3])
+    db_session.commit()
 
-        return {
-            "job_1_id": job_1.id,
-            "job_2_id": job_2.id,
-            "exec_1_id": exec_1.id,
-            "exec_2_id": exec_2.id,
-            "exec_3_id": exec_3.id,
-        }
+    return {
+        "job_1_id": job_1.id,
+        "job_2_id": job_2.id,
+        "exec_1_id": exec_1.id,
+        "exec_2_id": exec_2.id,
+        "exec_3_id": exec_3.id,
+    }
 
 
 @pytest.mark.asyncio
@@ -182,4 +180,3 @@ async def test_execution_statistics_job_filter_and_date_range(async_client, user
         headers={"Authorization": f"Bearer {user_access_token}"},
     )
     assert resp.status_code == 400
-

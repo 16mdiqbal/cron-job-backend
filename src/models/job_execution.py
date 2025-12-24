@@ -1,10 +1,13 @@
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
-from . import db
+from sqlalchemy import Column, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import backref, relationship
+
+from .base import Base
 
 
-class JobExecution(db.Model):
+class JobExecution(Base):
     """
     JobExecution model for tracking job execution history.
     
@@ -13,23 +16,23 @@ class JobExecution(db.Model):
     """
     __tablename__ = 'job_executions'
     
-    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    job_id = db.Column(db.String(36), db.ForeignKey('jobs.id', ondelete='CASCADE'), nullable=False, index=True)
-    status = db.Column(db.String(20), nullable=False)  # success, failed, running
-    trigger_type = db.Column(db.String(20), nullable=False)  # scheduled, manual
-    started_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-    completed_at = db.Column(db.DateTime, nullable=True)
-    duration_seconds = db.Column(db.Float, nullable=True)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    job_id = Column(String(36), ForeignKey('jobs.id', ondelete='CASCADE'), nullable=False, index=True)
+    status = Column(String(20), nullable=False)  # success, failed, running
+    trigger_type = Column(String(20), nullable=False)  # scheduled, manual
+    started_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    completed_at = Column(DateTime, nullable=True)
+    duration_seconds = Column(Float, nullable=True)
     
     # Execution details
-    execution_type = db.Column(db.String(50), nullable=True)  # github_actions, webhook
-    target = db.Column(db.String(500), nullable=True)  # URL or github workflow path
-    response_status = db.Column(db.Integer, nullable=True)  # HTTP status code
-    error_message = db.Column(db.Text, nullable=True)
-    output = db.Column(db.Text, nullable=True)
+    execution_type = Column(String(50), nullable=True)  # github_actions, webhook
+    target = Column(String(500), nullable=True)  # URL or github workflow path
+    response_status = Column(Integer, nullable=True)  # HTTP status code
+    error_message = Column(Text, nullable=True)
+    output = Column(Text, nullable=True)
     
     # Relationship
-    job = db.relationship('Job', backref=db.backref('executions', lazy=True, cascade='all, delete-orphan'))
+    job = relationship('Job', backref=backref('executions', cascade='all, delete-orphan'))
     
     def __repr__(self):
         return f'<JobExecution {self.id} - Job:{self.job_id} - Status:{self.status}>'

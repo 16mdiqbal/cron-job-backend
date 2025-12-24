@@ -2,30 +2,28 @@ import pytest
 
 
 @pytest.fixture
-def seed_categories_and_jobs(app, setup_test_db):
-    with app.app_context():
-        from src.models import db
-        from src.models.job import Job
-        from src.models.job_category import JobCategory
+def seed_categories_and_jobs(db_session, setup_test_db):
+    from src.models.job import Job
+    from src.models.job_category import JobCategory
 
-        general = JobCategory(slug="general", name="General", is_active=True)
-        old_cat = JobCategory(slug="old-cat", name="Old Cat", is_active=True)
-        db.session.add_all([general, old_cat])
+    general = JobCategory(slug="general", name="General", is_active=True)
+    old_cat = JobCategory(slug="old-cat", name="Old Cat", is_active=True)
+    db_session.add_all([general, old_cat])
 
-        job1 = Job(name="job-1", cron_expression="0 0 * * *", category="old-cat")
-        job2 = Job(name="job-2", cron_expression="0 0 * * *", category="old-cat")
-        job3 = Job(name="job-3", cron_expression="0 0 * * *", category="general")
-        db.session.add_all([job1, job2, job3])
+    job1 = Job(name="job-1", cron_expression="0 0 * * *", category="old-cat")
+    job2 = Job(name="job-2", cron_expression="0 0 * * *", category="old-cat")
+    job3 = Job(name="job-3", cron_expression="0 0 * * *", category="general")
+    db_session.add_all([job1, job2, job3])
 
-        db.session.commit()
+    db_session.commit()
 
-        return {
-            "general_id": general.id,
-            "old_cat_id": old_cat.id,
-            "job1_id": job1.id,
-            "job2_id": job2.id,
-            "job3_id": job3.id,
-        }
+    return {
+        "general_id": general.id,
+        "old_cat_id": old_cat.id,
+        "job1_id": job1.id,
+        "job2_id": job2.id,
+        "job3_id": job3.id,
+    }
 
 
 @pytest.mark.asyncio
@@ -125,7 +123,7 @@ async def test_update_general_category_cannot_be_renamed(async_client, admin_acc
 
 
 @pytest.mark.asyncio
-async def test_update_job_category_renames_slug_and_updates_jobs(async_client, admin_access_token, seed_categories_and_jobs, app):
+async def test_update_job_category_renames_slug_and_updates_jobs(async_client, admin_access_token, seed_categories_and_jobs):
     resp = await async_client.put(
         f"/api/v2/job-categories/{seed_categories_and_jobs['old_cat_id']}",
         headers={"Authorization": f"Bearer {admin_access_token}"},
@@ -137,19 +135,20 @@ async def test_update_job_category_renames_slug_and_updates_jobs(async_client, a
     assert payload["category"]["slug"] == "new-name"
     assert payload["jobs_updated"] == 2
 
-    with app.app_context():
-        from src.models.job import Job
+    from src.database.session import get_db_session
+    from src.models.job import Job
 
-        job1 = Job.query.get(seed_categories_and_jobs["job1_id"])
-        job2 = Job.query.get(seed_categories_and_jobs["job2_id"])
-        job3 = Job.query.get(seed_categories_and_jobs["job3_id"])
+    with get_db_session() as session:
+        job1 = session.get(Job, seed_categories_and_jobs["job1_id"])
+        job2 = session.get(Job, seed_categories_and_jobs["job2_id"])
+        job3 = session.get(Job, seed_categories_and_jobs["job3_id"])
         assert job1.category == "new-name"
         assert job2.category == "new-name"
         assert job3.category == "general"
 
 
 @pytest.mark.asyncio
-async def test_delete_job_category_disables(async_client, admin_access_token, seed_categories_and_jobs, app):
+async def test_delete_job_category_disables(async_client, admin_access_token, seed_categories_and_jobs):
     resp = await async_client.delete(
         f"/api/v2/job-categories/{seed_categories_and_jobs['old_cat_id']}",
         headers={"Authorization": f"Bearer {admin_access_token}"},
@@ -159,9 +158,9 @@ async def test_delete_job_category_disables(async_client, admin_access_token, se
     assert payload["message"] == "Category disabled"
     assert payload["category"]["is_active"] is False
 
-    with app.app_context():
-        from src.models.job_category import JobCategory
+    from src.database.session import get_db_session
+    from src.models.job_category import JobCategory
 
-        cat = JobCategory.query.get(seed_categories_and_jobs["old_cat_id"])
+    with get_db_session() as session:
+        cat = session.get(JobCategory, seed_categories_and_jobs["old_cat_id"])
         assert cat.is_active is False
-

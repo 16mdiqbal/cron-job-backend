@@ -1,30 +1,33 @@
 import uuid
 import json
 from datetime import datetime, timezone
-from . import db
+from sqlalchemy import Column, DateTime, ForeignKey, String, Text
+from sqlalchemy.orm import backref, relationship
+
+from .base import Base
 
 
-class UserUiPreferences(db.Model):
+class UserUiPreferences(Base):
     """
     Per-user UI preferences (cross-device).
     """
     __tablename__ = 'user_ui_preferences'
 
-    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = db.Column(db.String(36), db.ForeignKey('users.id'), unique=True, nullable=False)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id'), unique=True, nullable=False)
 
     # Store as JSON string to stay flexible without migrations.
-    jobs_table_columns = db.Column(db.Text, nullable=True)
+    jobs_table_columns = Column(Text, nullable=True)
 
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
-    updated_at = db.Column(
-        db.DateTime,
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(
+        DateTime,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
 
-    user = db.relationship('User', backref=db.backref('ui_preferences', uselist=False))
+    user = relationship('User', backref=backref('ui_preferences', uselist=False))
 
     def get_jobs_table_columns(self):
         if not self.jobs_table_columns:
@@ -51,4 +54,3 @@ class UserUiPreferences(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }
-

@@ -2,30 +2,28 @@ import pytest
 
 
 @pytest.fixture
-def seed_teams_and_jobs(app, setup_test_db):
-    with app.app_context():
-        from src.models import db
-        from src.models.job import Job
-        from src.models.pic_team import PicTeam
+def seed_teams_and_jobs(db_session, setup_test_db):
+    from src.models.job import Job
+    from src.models.pic_team import PicTeam
 
-        old_team = PicTeam(slug="old-team", name="Old Team", slack_handle="@old-team", is_active=True)
-        other_team = PicTeam(slug="other-team", name="Other Team", slack_handle="@other-team", is_active=True)
-        db.session.add_all([old_team, other_team])
+    old_team = PicTeam(slug="old-team", name="Old Team", slack_handle="@old-team", is_active=True)
+    other_team = PicTeam(slug="other-team", name="Other Team", slack_handle="@other-team", is_active=True)
+    db_session.add_all([old_team, other_team])
 
-        job1 = Job(name="team-job-1", cron_expression="0 0 * * *", pic_team="old-team", category="general")
-        job2 = Job(name="team-job-2", cron_expression="0 0 * * *", pic_team="old-team", category="general")
-        job3 = Job(name="team-job-3", cron_expression="0 0 * * *", pic_team="other-team", category="general")
-        db.session.add_all([job1, job2, job3])
+    job1 = Job(name="team-job-1", cron_expression="0 0 * * *", pic_team="old-team", category="general")
+    job2 = Job(name="team-job-2", cron_expression="0 0 * * *", pic_team="old-team", category="general")
+    job3 = Job(name="team-job-3", cron_expression="0 0 * * *", pic_team="other-team", category="general")
+    db_session.add_all([job1, job2, job3])
 
-        db.session.commit()
+    db_session.commit()
 
-        return {
-            "old_team_id": old_team.id,
-            "other_team_id": other_team.id,
-            "job1_id": job1.id,
-            "job2_id": job2.id,
-            "job3_id": job3.id,
-        }
+    return {
+        "old_team_id": old_team.id,
+        "other_team_id": other_team.id,
+        "job1_id": job1.id,
+        "job2_id": job2.id,
+        "job3_id": job3.id,
+    }
 
 
 @pytest.mark.asyncio
@@ -136,7 +134,7 @@ async def test_update_pic_team_slack_handle_cannot_be_empty(async_client, admin_
 
 
 @pytest.mark.asyncio
-async def test_update_pic_team_renames_slug_and_updates_jobs(async_client, admin_access_token, seed_teams_and_jobs, app):
+async def test_update_pic_team_renames_slug_and_updates_jobs(async_client, admin_access_token, seed_teams_and_jobs):
     resp = await async_client.put(
         f"/api/v2/pic-teams/{seed_teams_and_jobs['old_team_id']}",
         headers={"Authorization": f"Bearer {admin_access_token}"},
@@ -148,19 +146,20 @@ async def test_update_pic_team_renames_slug_and_updates_jobs(async_client, admin
     assert payload["pic_team"]["slug"] == "new-team-name"
     assert payload["jobs_updated"] == 2
 
-    with app.app_context():
-        from src.models.job import Job
+    from src.database.session import get_db_session
+    from src.models.job import Job
 
-        job1 = Job.query.get(seed_teams_and_jobs["job1_id"])
-        job2 = Job.query.get(seed_teams_and_jobs["job2_id"])
-        job3 = Job.query.get(seed_teams_and_jobs["job3_id"])
+    with get_db_session() as session:
+        job1 = session.get(Job, seed_teams_and_jobs["job1_id"])
+        job2 = session.get(Job, seed_teams_and_jobs["job2_id"])
+        job3 = session.get(Job, seed_teams_and_jobs["job3_id"])
         assert job1.pic_team == "new-team-name"
         assert job2.pic_team == "new-team-name"
         assert job3.pic_team == "other-team"
 
 
 @pytest.mark.asyncio
-async def test_update_pic_team_can_toggle_is_active(async_client, admin_access_token, seed_teams_and_jobs, app):
+async def test_update_pic_team_can_toggle_is_active(async_client, admin_access_token, seed_teams_and_jobs):
     resp = await async_client.put(
         f"/api/v2/pic-teams/{seed_teams_and_jobs['old_team_id']}",
         headers={"Authorization": f"Bearer {admin_access_token}"},
@@ -169,15 +168,16 @@ async def test_update_pic_team_can_toggle_is_active(async_client, admin_access_t
     assert resp.status_code == 200
     assert resp.json()["pic_team"]["is_active"] is False
 
-    with app.app_context():
-        from src.models.pic_team import PicTeam
+    from src.database.session import get_db_session
+    from src.models.pic_team import PicTeam
 
-        team = PicTeam.query.get(seed_teams_and_jobs["old_team_id"])
+    with get_db_session() as session:
+        team = session.get(PicTeam, seed_teams_and_jobs["old_team_id"])
         assert team.is_active is False
 
 
 @pytest.mark.asyncio
-async def test_delete_pic_team_disables(async_client, admin_access_token, seed_teams_and_jobs, app):
+async def test_delete_pic_team_disables(async_client, admin_access_token, seed_teams_and_jobs):
     resp = await async_client.delete(
         f"/api/v2/pic-teams/{seed_teams_and_jobs['old_team_id']}",
         headers={"Authorization": f"Bearer {admin_access_token}"},
@@ -187,9 +187,9 @@ async def test_delete_pic_team_disables(async_client, admin_access_token, seed_t
     assert payload["message"] == "PIC team disabled"
     assert payload["pic_team"]["is_active"] is False
 
-    with app.app_context():
-        from src.models.pic_team import PicTeam
+    from src.database.session import get_db_session
+    from src.models.pic_team import PicTeam
 
-        team = PicTeam.query.get(seed_teams_and_jobs["old_team_id"])
+    with get_db_session() as session:
+        team = session.get(PicTeam, seed_teams_and_jobs["old_team_id"])
         assert team.is_active is False
-

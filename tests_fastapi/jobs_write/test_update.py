@@ -9,85 +9,83 @@ def _today_jst():
 
 
 @pytest.fixture
-def seed_update_jobs(app, setup_test_db):
-    with app.app_context():
-        from src.models import db
-        from src.models.job import Job
-        from src.models.job_category import JobCategory
-        from src.models.pic_team import PicTeam
+def seed_update_jobs(db_session, setup_test_db):
+    from src.models.job import Job
+    from src.models.job_category import JobCategory
+    from src.models.pic_team import PicTeam
 
-        admin = setup_test_db["admin"]
-        user = setup_test_db["user"]
+    admin = setup_test_db["admin"]
+    user = setup_test_db["user"]
 
-        category = JobCategory(slug="maintenance", name="Maintenance Jobs", is_active=True)
-        team = PicTeam(slug="team-a", name="Team A", slack_handle="@team-a", is_active=True)
-        disabled_team = PicTeam(slug="team-b", name="Team B", slack_handle="@team-b", is_active=False)
-        db.session.add_all([category, team, disabled_team])
-        db.session.flush()
+    category = JobCategory(slug="maintenance", name="Maintenance Jobs", is_active=True)
+    team = PicTeam(slug="team-a", name="Team A", slack_handle="@team-a", is_active=True)
+    disabled_team = PicTeam(slug="team-b", name="Team B", slack_handle="@team-b", is_active=False)
+    db_session.add_all([category, team, disabled_team])
+    db_session.flush()
 
-        job_user = Job(
-            name="user-job",
-            cron_expression="0 * * * *",
-            category=category.slug,
-            end_date=_today_jst(),
-            pic_team=team.slug,
-            created_by=user.id,
-            target_url="https://example.com/hook",
-            enable_email_notifications=True,
-            notify_on_success=True,
-            is_active=True,
-        )
-        job_user.set_notification_emails(["a@example.com"])
-        db.session.add(job_user)
+    job_user = Job(
+        name="user-job",
+        cron_expression="0 * * * *",
+        category=category.slug,
+        end_date=_today_jst(),
+        pic_team=team.slug,
+        created_by=user.id,
+        target_url="https://example.com/hook",
+        enable_email_notifications=True,
+        notify_on_success=True,
+        is_active=True,
+    )
+    job_user.set_notification_emails(["a@example.com"])
+    db_session.add(job_user)
 
-        job_admin = Job(
-            name="admin-job",
-            cron_expression="15 * * * *",
-            category=category.slug,
-            end_date=_today_jst(),
-            pic_team=team.slug,
-            created_by=admin.id,
-            target_url="https://example.com/hook",
-            is_active=True,
-        )
-        db.session.add(job_admin)
+    job_admin = Job(
+        name="admin-job",
+        cron_expression="15 * * * *",
+        category=category.slug,
+        end_date=_today_jst(),
+        pic_team=team.slug,
+        created_by=admin.id,
+        target_url="https://example.com/hook",
+        is_active=True,
+    )
+    db_session.add(job_admin)
 
-        job_dup = Job(
-            name="dup-job",
-            cron_expression="30 * * * *",
-            category=category.slug,
-            end_date=_today_jst(),
-            pic_team=team.slug,
-            created_by=user.id,
-            target_url="https://example.com/hook",
-            is_active=True,
-        )
-        db.session.add(job_dup)
+    job_dup = Job(
+        name="dup-job",
+        cron_expression="30 * * * *",
+        category=category.slug,
+        end_date=_today_jst(),
+        pic_team=team.slug,
+        created_by=user.id,
+        target_url="https://example.com/hook",
+        is_active=True,
+    )
+    db_session.add(job_dup)
 
-        expired_job = Job(
-            name="expired-job",
-            cron_expression="0 * * * *",
-            category=category.slug,
-            end_date=_today_jst() - timedelta(days=1),
-            pic_team=team.slug,
-            created_by=user.id,
-            target_url="https://example.com/hook",
-            is_active=False,
-        )
-        db.session.add(expired_job)
+    expired_job = Job(
+        name="expired-job",
+        cron_expression="0 * * * *",
+        category=category.slug,
+        end_date=_today_jst() - timedelta(days=1),
+        pic_team=team.slug,
+        created_by=user.id,
+        target_url="https://example.com/hook",
+        is_active=False,
+    )
+    db_session.add(expired_job)
 
-        db.session.commit()
+    db_session.commit()
 
-        return {
-            "category_slug": category.slug,
-            "category_name": category.name,
-            "team_slug": team.slug,
-            "disabled_team_slug": disabled_team.slug,
-            "job_user_id": job_user.id,
-            "job_admin_id": job_admin.id,
-            "job_dup_id": job_dup.id,
-            "expired_job_id": expired_job.id,
-        }
+    return {
+        "category_slug": category.slug,
+        "category_name": category.name,
+        "team_slug": team.slug,
+        "disabled_team_slug": disabled_team.slug,
+        "job_user_id": job_user.id,
+        "job_admin_id": job_admin.id,
+        "job_dup_id": job_dup.id,
+        "expired_job_id": expired_job.id,
+    }
 
 
 @pytest.mark.asyncio

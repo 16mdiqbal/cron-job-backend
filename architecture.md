@@ -1,55 +1,53 @@
-# Backend Architecture for Cron Job Scheduler
+# Backend Architecture for Cron Job Scheduler (FastAPI)
 
 ## Overview
-This document outlines the architecture for a backend service built with Python (using Flask) and APScheduler to handle the scheduling of cron jobs and trigger GitHub Actions.
+This backend is a **FastAPI** service that manages cron jobs stored in a database and runs schedules using **APScheduler**. Jobs can trigger either:
+- a generic **Webhook URL**, or
+- a **GitHub Actions workflow dispatch**.
 
-**Note (Migration):** FastAPI v2 is being introduced side-by-side. The migration plan and phase tracking live in `FASTAPI_MIGRATION_PLAN.md`, and the FastAPI code lives under `src/fastapi_app/` (served under `/api/v2/*`).
+The primary API surface is served under **`/api/v2/*`**.
 
-## Components
+## Key Components
 
-### 1. Framework
-- **Flask**: A lightweight web framework for building RESTful APIs.
-- **APScheduler**: A Python library to manage scheduled jobs.
+### 1. FastAPI Application
+- **Entry point:** `src/fastapi_app/main.py`
+- **Routers:** `src/fastapi_app/routers/` (Auth, Jobs, Executions, Notifications, Taxonomy, Settings, Scheduler)
+- **Docs:** `GET /docs` (Swagger UI), `GET /redoc`
+- **Health:** `GET /api/v2/health`
 
-### 1.1 FastAPI (Migration, Side-by-Side)
-- **FastAPI v2** runs alongside Flask and serves new endpoints under **`/api/v2/*`**.
-- **Entry point**: `src/fastapi_app/main.py` (registers routers, exposes `GET /api/v2/health`).
-- **Config**: `src/fastapi_app/config.py` (Pydantic settings; shares env vars with Flask during migration).
-- **Shared DB utilities**: `src/database/engine.py` + `src/database/session.py` (sync for Flask, async for FastAPI).
-- **FastAPI tests** live in `tests_fastapi/` to avoid importing Flask’s `test/conftest.py` and scheduler side-effects.
+### 2. Database Layer
+- **Models:** `src/models/` (plain SQLAlchemy declarative models)
+- **Engines:** `src/database/engine.py` (sync + async engines)
+- **Sessions:** `src/database/session.py` (sync + async session factories)
+- **Bootstrap:** `src/database/bootstrap.py` (creates tables + lightweight schema guard)
 
-### 2. Project Structure
-project-root/
-│
-├── app.py # Main Flask application
-├── scheduler/ # Folder for scheduling logic
-│ ├── jobs.py # Job definitions and functions
-│ └── init.py
-│
-├── requirements.txt # Project dependencies
-└── README.md # Documentation
+### 3. Scheduler Layer (APScheduler)
+- **Scheduler instance:** `src/scheduler/__init__.py`
+- **Execution logic:** `src/scheduler/job_executor.py`
+- **FastAPI runtime:** `src/fastapi_app/scheduler_runtime.py`
+  - leader-only start via lock file
+  - periodic **DB → scheduler** reconciliation (`src/fastapi_app/scheduler_reconcile.py`)
+  - internal weekly maintenance job `end_date_maintenance`
 
+### 4. Services
+- **End-date maintenance:** `src/services/end_date_maintenance.py`
+  - auto-pause expired jobs
+  - weekly reminders for jobs ending soon (in-app + optional Slack)
 
-### 3. API Endpoints
+### 5. Notifications
+- Stored in DB as `notifications` and surfaced via `src/fastapi_app/routers/notifications.py`.
+- Scheduler/job execution publishes notifications (success/failure/auto-pause).
 
-- **`GET /api/jobs`**: List all scheduled jobs.
-- **`POST /api/jobs`**: Create a new job (name, schedule, URL/command).
-- **`GET /api/jobs/<job_id>`**: Retrieve details of a specific job.
-- **`PUT /api/jobs/<job_id>`**: Update an existing job.
-- **`DELETE /api/jobs/<job_id>`**: Delete a job.
-- **`POST /api/jobs/<job_id>/trigger`**: Manually trigger a job immediately, initiating a GitHub Actions dispatch.
+## API Groups (High Level)
+- `POST /api/v2/auth/login`, `POST /api/v2/auth/refresh`, `GET /api/v2/auth/me`
+- `GET/POST/PUT/DELETE /api/v2/jobs` (+ bulk upload + execute)
+- `GET /api/v2/executions` (+ per-job and stats endpoints)
+- `GET/PUT/DELETE /api/v2/notifications` (+ unread-count + read-all)
+- `GET/POST/PUT/DELETE /api/v2/job-categories`
+- `GET/POST/PUT/DELETE /api/v2/pic-teams`
+- `GET/PUT /api/v2/settings/slack`
+- `POST /api/v2/scheduler/resync` (admin only)
 
-### 4. Job Scheduling and Execution
+## Testing
+- FastAPI tests live in `tests_fastapi/` and run against a per-test temporary SQLite DB.
 
-- **APScheduler Initialization**: Set up the scheduler when the Flask app starts.
-- **Cron Expressions**: Allow jobs to be scheduled with cron expressions.
-- **GitHub Actions Trigger**: On job execution, make a POST request to the GitHub API to trigger a workflow dispatch event.
-
-### 5. Dependencies and Configuration
-
-- **Dependencies**: Include Flask, APScheduler, and requests (for GitHub API calls) in `requirements.txt`.
-- **Configuration**: Add configuration settings for job stores, logging, and GitHub API tokens as needed.
-
-## Conclusion
-
-This architecture provides a robust foundation for building your backend service. You can expand the endpoints and functionality as needed in the future.

@@ -11,21 +11,19 @@ def _today_jst_str() -> str:
 
 
 @pytest.fixture
-def seed_team_and_category(app, setup_test_db):
-    with app.app_context():
-        from src.models import db
-        from src.models.job_category import JobCategory
-        from src.models.pic_team import PicTeam
+def seed_team_and_category(db_session, setup_test_db):
+    from src.models.job_category import JobCategory
+    from src.models.pic_team import PicTeam
 
-        team = PicTeam(slug="team-a", name="Team A", slack_handle="@team-a", is_active=True)
-        category = JobCategory(slug="maintenance", name="Maintenance Jobs", is_active=True)
-        db.session.add_all([team, category])
-        db.session.commit()
-        return {"team_slug": team.slug, "category_slug": category.slug}
+    team = PicTeam(slug="team-a", name="Team A", slack_handle="@team-a", is_active=True)
+    category = JobCategory(slug="maintenance", name="Maintenance Jobs", is_active=True)
+    db_session.add_all([team, category])
+    db_session.commit()
+    return {"team_slug": team.slug, "category_slug": category.slug}
 
 
 @pytest.fixture
-async def scheduler_client(db_urls, setup_test_db, tmp_path, monkeypatch):
+async def scheduler_client(db_url, setup_test_db, tmp_path, monkeypatch):
     monkeypatch.setenv("TESTING", "false")
     monkeypatch.setenv("SCHEDULER_ENABLED", "true")
     monkeypatch.setenv("SCHEDULER_LOCK_PATH", str(tmp_path / "scheduler.lock"))
@@ -136,4 +134,3 @@ async def test_delete_job_unschedules(scheduler_client, user_access_token, seed_
     )
     assert delete_resp.status_code == 200
     assert apscheduler.get_job(job_id) is None
-

@@ -17,111 +17,99 @@ class _DummyResponse:
 
 
 @pytest.fixture
-def seed_job_for_webhook(app, setup_test_db):
-    with app.app_context():
-        from src.models import db
-
-        user = setup_test_db["user"]
-        job = Job(
-            name="webhook-job",
-            cron_expression="0 0 * * *",
-            target_url="https://example.com/hook",
-            created_by=user.id,
-            is_active=True,
-            end_date=date(2099, 1, 1),
-            category="general",
-            pic_team=None,
-        )
-        job.set_metadata({"hello": "world"})  # Forces webhook POST path in executor.
-        db.session.add(job)
-        db.session.commit()
-        return job.id
+def seed_job_for_webhook(db_session, setup_test_db):
+    user = setup_test_db["user"]
+    job = Job(
+        name="webhook-job",
+        cron_expression="0 0 * * *",
+        target_url="https://example.com/hook",
+        created_by=user.id,
+        is_active=True,
+        end_date=date(2099, 1, 1),
+        category="general",
+        pic_team=None,
+    )
+    job.set_metadata({"hello": "world"})  # Forces webhook POST path in executor.
+    db_session.add(job)
+    db_session.commit()
+    return job.id
 
 
 @pytest.fixture
-def seed_job_for_github(app, setup_test_db):
-    with app.app_context():
-        from src.models import db
-
-        user = setup_test_db["user"]
-        job = Job(
-            name="github-job",
-            cron_expression="0 0 * * *",
-            github_owner="Pay-Baymax",
-            github_repo="qa-automate-apiqa",
-            github_workflow_name="API_Launcher",
-            created_by=user.id,
-            is_active=True,
-            end_date=date(2099, 1, 1),
-            category="general",
-            pic_team=None,
-        )
-        db.session.add(job)
-        db.session.commit()
-        return job.id
+def seed_job_for_github(db_session, setup_test_db):
+    user = setup_test_db["user"]
+    job = Job(
+        name="github-job",
+        cron_expression="0 0 * * *",
+        github_owner="Pay-Baymax",
+        github_repo="qa-automate-apiqa",
+        github_workflow_name="API_Launcher",
+        created_by=user.id,
+        is_active=True,
+        end_date=date(2099, 1, 1),
+        category="general",
+        pic_team=None,
+    )
+    db_session.add(job)
+    db_session.commit()
+    return job.id
 
 
 @pytest.fixture
-def seed_job_inactive(app, setup_test_db):
-    with app.app_context():
-        from src.models import db
-
-        user = setup_test_db["user"]
-        job = Job(
-            name="inactive-job",
-            cron_expression="0 0 * * *",
-            target_url="https://example.com/hook",
-            created_by=user.id,
-            is_active=False,
-            end_date=date(2099, 1, 1),
-            category="general",
-            pic_team=None,
-        )
-        db.session.add(job)
-        db.session.commit()
-        return job.id
+def seed_job_inactive(db_session, setup_test_db):
+    user = setup_test_db["user"]
+    job = Job(
+        name="inactive-job",
+        cron_expression="0 0 * * *",
+        target_url="https://example.com/hook",
+        created_by=user.id,
+        is_active=False,
+        end_date=date(2099, 1, 1),
+        category="general",
+        pic_team=None,
+    )
+    db_session.add(job)
+    db_session.commit()
+    return job.id
 
 
 @pytest.fixture
-def seed_job_expired(app, setup_test_db):
-    with app.app_context():
-        from src.models import db
-
-        user = setup_test_db["user"]
-        job = Job(
-            name="expired-job",
-            cron_expression="0 0 * * *",
-            target_url="https://example.com/hook",
-            created_by=user.id,
-            is_active=True,
-            end_date=date(2000, 1, 1),
-            category="general",
-            pic_team=None,
-        )
-        db.session.add(job)
-        db.session.commit()
-        return job.id
+def seed_job_expired(db_session, setup_test_db):
+    user = setup_test_db["user"]
+    job = Job(
+        name="expired-job",
+        cron_expression="0 0 * * *",
+        target_url="https://example.com/hook",
+        created_by=user.id,
+        is_active=True,
+        end_date=date(2000, 1, 1),
+        category="general",
+        pic_team=None,
+    )
+    db_session.add(job)
+    db_session.commit()
+    return job.id
 
 
 def _count(session, model) -> int:
     return int(session.execute(select(func.count()).select_from(model)).scalar_one() or 0)
 
 
-def test_execute_job_skips_inactive_job(seed_job_inactive, app):
-    with app.app_context():
-        job = Job.query.get(seed_job_inactive)
+def test_execute_job_skips_inactive_job(seed_job_inactive):
+    with get_db_session() as session:
+        job = session.get(Job, seed_job_inactive)
         job_executor.execute_job(job.id, job.name, job.to_dict(), scheduler_timezone="UTC")
 
     with get_db_session() as session:
         assert _count(session, JobExecution) == 0
 
 
-def test_execute_job_end_date_guard_auto_pauses_and_notifies(seed_job_expired, setup_test_db, app):
+def test_execute_job_end_date_guard_auto_pauses_and_notifies(seed_job_expired, setup_test_db):
     user_id = setup_test_db["user"].id
     admin_id = setup_test_db["admin"].id
 
-    with app.app_context():
-        job = Job.query.get(seed_job_expired)
+    with get_db_session() as session:
+        job = session.get(Job, seed_job_expired)
         assert job.is_active is True
         job_executor.execute_job(job.id, job.name, job.to_dict(), scheduler_timezone="Asia/Tokyo")
 
@@ -134,18 +122,18 @@ def test_execute_job_end_date_guard_auto_pauses_and_notifies(seed_job_expired, s
         assert {n.user_id for n in rows} == {user_id, admin_id}
 
 
-def test_execute_job_webhook_success_creates_execution_and_broadcasts(seed_job_for_webhook, app, monkeypatch):
+def test_execute_job_webhook_success_creates_execution_and_broadcasts(seed_job_for_webhook, monkeypatch):
     def fake_post(url, json=None, timeout=None, headers=None):
         assert url == "https://example.com/hook"
         assert json == {"hello": "world"}
         return _DummyResponse(200, text="ok")
 
-    with app.app_context():
-        job = Job.query.get(seed_job_for_webhook)
+    with get_db_session() as session:
+        job = session.get(Job, seed_job_for_webhook)
         assert job is not None
 
-    with app.app_context():
-        job = Job.query.get(seed_job_for_webhook)
+    with get_db_session() as session:
+        job = session.get(Job, seed_job_for_webhook)
         monkeypatch.setattr(job_executor.requests, "post", fake_post)
         job_executor.execute_job(job.id, job.name, job.to_dict(), scheduler_timezone="UTC")
 
@@ -163,11 +151,11 @@ def test_execute_job_webhook_success_creates_execution_and_broadcasts(seed_job_f
         assert "Job Completed" in titles
 
 
-def test_execute_job_github_missing_token_records_target(seed_job_for_github, app, monkeypatch):
+def test_execute_job_github_missing_token_records_target(seed_job_for_github, monkeypatch):
     monkeypatch.delenv("GITHUB_TOKEN", raising=False)
 
-    with app.app_context():
-        job = Job.query.get(seed_job_for_github)
+    with get_db_session() as session:
+        job = session.get(Job, seed_job_for_github)
         job_executor.execute_job(job.id, job.name, job.to_dict(), scheduler_timezone="UTC")
 
     with get_db_session() as session:

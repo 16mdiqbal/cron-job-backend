@@ -4,59 +4,57 @@ import pytest
 
 
 @pytest.fixture
-def seed_notifications_for_delete(app, setup_test_db):
-    with app.app_context():
-        from src.models import db
-        from src.models.notification import Notification
+def seed_notifications_for_delete(db_session, setup_test_db):
+    from src.models.notification import Notification
 
-        user = setup_test_db["user"]
-        admin = setup_test_db["admin"]
+    user = setup_test_db["user"]
+    admin = setup_test_db["admin"]
 
-        user_read_old = Notification(
-            user_id=user.id,
-            title="Read Old",
-            message="Read old message",
-            type="info",
-            is_read=True,
-            read_at=datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
-            created_at=datetime(2025, 1, 1, 9, 0, 0, tzinfo=timezone.utc),
-        )
-        user_read_new = Notification(
-            user_id=user.id,
-            title="Read New",
-            message="Read new message",
-            type="success",
-            is_read=True,
-            read_at=datetime(2025, 1, 3, 10, 0, 0, tzinfo=timezone.utc),
-            created_at=datetime(2025, 1, 3, 9, 0, 0, tzinfo=timezone.utc),
-        )
-        user_unread = Notification(
-            user_id=user.id,
-            title="Unread",
-            message="Unread message",
-            type="warning",
-            is_read=False,
-            created_at=datetime(2025, 1, 2, 9, 0, 0, tzinfo=timezone.utc),
-        )
-        admin_read = Notification(
-            user_id=admin.id,
-            title="Admin Read",
-            message="Admin read message",
-            type="info",
-            is_read=True,
-            read_at=datetime(2025, 1, 2, 10, 0, 0, tzinfo=timezone.utc),
-            created_at=datetime(2025, 1, 2, 9, 0, 0, tzinfo=timezone.utc),
-        )
+    user_read_old = Notification(
+        user_id=user.id,
+        title="Read Old",
+        message="Read old message",
+        type="info",
+        is_read=True,
+        read_at=datetime(2025, 1, 1, 10, 0, 0, tzinfo=timezone.utc),
+        created_at=datetime(2025, 1, 1, 9, 0, 0, tzinfo=timezone.utc),
+    )
+    user_read_new = Notification(
+        user_id=user.id,
+        title="Read New",
+        message="Read new message",
+        type="success",
+        is_read=True,
+        read_at=datetime(2025, 1, 3, 10, 0, 0, tzinfo=timezone.utc),
+        created_at=datetime(2025, 1, 3, 9, 0, 0, tzinfo=timezone.utc),
+    )
+    user_unread = Notification(
+        user_id=user.id,
+        title="Unread",
+        message="Unread message",
+        type="warning",
+        is_read=False,
+        created_at=datetime(2025, 1, 2, 9, 0, 0, tzinfo=timezone.utc),
+    )
+    admin_read = Notification(
+        user_id=admin.id,
+        title="Admin Read",
+        message="Admin read message",
+        type="info",
+        is_read=True,
+        read_at=datetime(2025, 1, 2, 10, 0, 0, tzinfo=timezone.utc),
+        created_at=datetime(2025, 1, 2, 9, 0, 0, tzinfo=timezone.utc),
+    )
 
-        db.session.add_all([user_read_old, user_read_new, user_unread, admin_read])
-        db.session.commit()
+    db_session.add_all([user_read_old, user_read_new, user_unread, admin_read])
+    db_session.commit()
 
-        return {
-            "user_read_old_id": user_read_old.id,
-            "user_read_new_id": user_read_new.id,
-            "user_unread_id": user_unread.id,
-            "admin_read_id": admin_read.id,
-        }
+    return {
+        "user_read_old_id": user_read_old.id,
+        "user_read_new_id": user_read_new.id,
+        "user_unread_id": user_unread.id,
+        "admin_read_id": admin_read.id,
+    }
 
 
 @pytest.mark.asyncio
@@ -170,4 +168,3 @@ async def test_delete_read_notifications_date_range_inclusive_to_day(
     ids = [n["id"] for n in list_resp.json()["notifications"]]
     assert seed_notifications_for_delete["user_read_old_id"] not in ids
     assert seed_notifications_for_delete["user_read_new_id"] in ids
-

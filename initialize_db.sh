@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Database Initialization Script
-# This script initializes the database and creates the default admin user
+# This script initializes the DB schema and creates a default admin user (FastAPI-only).
 # Usage: ./initialize_db.sh
 
 echo "=========================================="
@@ -9,21 +9,13 @@ echo "Initializing Database and Admin User"
 echo "=========================================="
 echo ""
 
-cd /Users/mohammadiqbal/Documents/Workspace/cron-job-backend
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$ROOT_DIR"
 
 # Activate virtual environment
-source venv/bin/activate
-
-# Clean up old database files
-echo "Cleaning up old database files..."
-rm -f cron_jobs.db 2>/dev/null || true
-rm -f instance/cron_jobs.db 2>/dev/null || true
-
-# Ensure the correct database directory exists
-mkdir -p src/instance
-
-echo "✓ Cleaned up old database files"
-echo ""
+if [[ -f "$ROOT_DIR/venv/bin/activate" ]]; then
+  source "$ROOT_DIR/venv/bin/activate"
+fi
 
 # Run the initialization script
 echo "Running initialization script..."

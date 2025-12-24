@@ -9,37 +9,35 @@ def _today_jst():
 
 
 @pytest.fixture
-def seed_delete_jobs(app, setup_test_db):
-    with app.app_context():
-        from src.models import db
-        from src.models.job import Job
+def seed_delete_jobs(db_session, setup_test_db):
+    from src.models.job import Job
 
-        admin = setup_test_db["admin"]
-        user = setup_test_db["user"]
+    admin = setup_test_db["admin"]
+    user = setup_test_db["user"]
 
-        user_job = Job(
-            name="delete-user-job",
-            cron_expression="0 * * * *",
-            end_date=_today_jst(),
-            created_by=user.id,
-            target_url="https://example.com/hook",
-            is_active=True,
-        )
-        db.session.add(user_job)
+    user_job = Job(
+        name="delete-user-job",
+        cron_expression="0 * * * *",
+        end_date=_today_jst(),
+        created_by=user.id,
+        target_url="https://example.com/hook",
+        is_active=True,
+    )
+    db_session.add(user_job)
 
-        admin_job = Job(
-            name="delete-admin-job",
-            cron_expression="15 * * * *",
-            end_date=_today_jst(),
-            created_by=admin.id,
-            target_url="https://example.com/hook",
-            is_active=True,
-        )
-        db.session.add(admin_job)
+    admin_job = Job(
+        name="delete-admin-job",
+        cron_expression="15 * * * *",
+        end_date=_today_jst(),
+        created_by=admin.id,
+        target_url="https://example.com/hook",
+        is_active=True,
+    )
+    db_session.add(admin_job)
 
-        db.session.commit()
+    db_session.commit()
 
-        return {"user_job_id": user_job.id, "admin_job_id": admin_job.id}
+    return {"user_job_id": user_job.id, "admin_job_id": admin_job.id}
 
 
 @pytest.mark.asyncio

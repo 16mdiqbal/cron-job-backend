@@ -10,7 +10,7 @@ def _today_jst() -> date:
 
 
 @pytest.fixture
-def scheduler_env_with_resync(db_urls, setup_test_db, tmp_path, monkeypatch):
+def scheduler_env_with_resync(db_url, setup_test_db, tmp_path, monkeypatch):
     monkeypatch.setenv("TESTING", "false")
     monkeypatch.setenv("SCHEDULER_ENABLED", "true")
     monkeypatch.setenv("SCHEDULER_LOCK_PATH", str(tmp_path / "scheduler.lock"))
@@ -38,25 +38,23 @@ def scheduler_env_with_resync(db_urls, setup_test_db, tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_startup_resync_bootstraps_existing_db_job(scheduler_env_with_resync, app, setup_test_db):
-    with app.app_context():
-        from src.models import db
-        from src.models.job import Job
+async def test_startup_resync_bootstraps_existing_db_job(scheduler_env_with_resync, db_session, setup_test_db):
+    from src.models.job import Job
 
-        job = Job(
-            name="resync-existing-job",
-            cron_expression="*/15 * * * *",
-            target_url="https://example.com/hook",
-            category="general",
-            end_date=_today_jst() + timedelta(days=30),
-            pic_team=None,
-            created_by=setup_test_db["user"].id,
-            is_active=True,
-        )
-        db.session.add(job)
-        db.session.commit()
-        db.session.refresh(job)
-        job_id = job.id
+    job = Job(
+        name="resync-existing-job",
+        cron_expression="*/15 * * * *",
+        target_url="https://example.com/hook",
+        category="general",
+        end_date=_today_jst() + timedelta(days=30),
+        pic_team=None,
+        created_by=setup_test_db["user"].id,
+        is_active=True,
+    )
+    db_session.add(job)
+    db_session.commit()
+    db_session.refresh(job)
+    job_id = job.id
 
     from src.fastapi_app import scheduler_runtime
     from src.scheduler import scheduler as apscheduler
@@ -97,27 +95,24 @@ async def test_resync_endpoint_removes_orphaned_scheduler_jobs(scheduler_env_wit
 
 
 @pytest.mark.asyncio
-async def test_resync_auto_pauses_expired_jobs(scheduler_env_with_resync, app, setup_test_db):
+async def test_resync_auto_pauses_expired_jobs(scheduler_env_with_resync, db_session, setup_test_db):
     expired_date = _today_jst() - timedelta(days=1)
+    from src.models.job import Job
 
-    with app.app_context():
-        from src.models import db
-        from src.models.job import Job
-
-        job = Job(
-            name="resync-expired-job",
-            cron_expression="0 * * * *",
-            target_url="https://example.com/hook",
-            category="general",
-            end_date=expired_date,
-            pic_team=None,
-            created_by=setup_test_db["user"].id,
-            is_active=True,
-        )
-        db.session.add(job)
-        db.session.commit()
-        db.session.refresh(job)
-        job_id = job.id
+    job = Job(
+        name="resync-expired-job",
+        cron_expression="0 * * * *",
+        target_url="https://example.com/hook",
+        category="general",
+        end_date=expired_date,
+        pic_team=None,
+        created_by=setup_test_db["user"].id,
+        is_active=True,
+    )
+    db_session.add(job)
+    db_session.commit()
+    db_session.refresh(job)
+    job_id = job.id
 
     from src.fastapi_app import scheduler_runtime
     from src.fastapi_app.scheduler_reconcile import resync_from_db

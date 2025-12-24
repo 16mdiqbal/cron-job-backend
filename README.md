@@ -1,6 +1,6 @@
 # Cron Job Scheduler Backend
 
-A production-ready Flask-based REST API for scheduling and managing cron jobs with APScheduler, featuring GitHub Actions integration, CORS support, and comprehensive validation.
+A production-ready FastAPI-based REST API for scheduling and managing cron jobs with APScheduler, featuring GitHub Actions integration, CORS support, and comprehensive validation.
 
 ## Features
 
@@ -22,12 +22,11 @@ A production-ready Flask-based REST API for scheduling and managing cron jobs wi
 - ✅ **Execution Statistics** - Analyze job performance with success rates and metrics
 - ✅ **Date Range Filtering** - Filter executions, statistics, and notifications using `from`/`to` query params
 - ✅ **Persistent Storage** - SQLite database (production-ready for MySQL migration)
-- ✅ **Background Scheduler** - APScheduler with SQLAlchemy job store
+- ✅ **Background Scheduler** - APScheduler (leader-only via lock) with DB → scheduler reconciliation
 - ✅ **CORS Enabled** - Ready for frontend integration with proper auth headers
 - ✅ **Unique Job Names** - Prevents duplicate job names
 - ✅ **Active/Inactive Toggle** - Enable or disable jobs without deletion
 - ✅ **Per-User UI Preferences** - Persist UI settings (e.g., Jobs table columns) across devices
-- ✅ **Blueprint Architecture** - Clean, maintainable code structure
 
 ## Project Structure
 
@@ -36,13 +35,10 @@ cron-job-backend/
 ├── src/                    # Source code directory
 │   ├── __init__.py        # Package marker
 │   ├── __main__.py        # Module entry point (python -m src)
-│   ├── app.py             # Main Flask application (Factory pattern)
-│   ├── config.py          # Configuration settings
-│   ├── scripts/           # One-off maintenance scripts
-│   │   ├── __init__.py
-│   │   └── backfill_github_owner.py
+│   ├── database/          # SQLAlchemy engines + session factories
+│   ├── fastapi_app/       # FastAPI v2 app + routers (/api/v2/*)
 │   ├── models/
-│   │   ├── __init__.py    # Database initialization
+│   │   ├── __init__.py
 │   │   ├── user.py        # User model with authentication
 │   │   ├── job.py         # Job model with ownership tracking
 │   │   ├── job_category.py # Job category model (admin-managed)
@@ -51,14 +47,8 @@ cron-job-backend/
 │   │   ├── job_execution.py # Job execution history model
 │   │   └── notification.py # Notification model (in-app inbox)
 │   │   └── ui_preferences.py # Per-user UI preferences
-│   ├── routes/
-│   │   ├── __init__.py    # Routes package
-│   │   ├── auth.py        # Authentication endpoints (Blueprint)
-│   │   ├── jobs.py        # Job/execution/category API endpoints (Blueprint)
-│   │   └── notifications.py # Notification inbox endpoints (Blueprint)
 │   ├── utils/
 │   │   ├── __init__.py    # Utilities package
-│   │   ├── auth.py        # Auth decorators and helpers
 │   │   ├── email.py       # Email notification utilities
 │   │   └── sqlite_schema.py # Lightweight SQLite schema guard (no Alembic)
 │   │   └── slack.py       # Slack incoming webhook helper
@@ -69,17 +59,7 @@ cron-job-backend/
 │       └── job_executor.py # Job execution functions
 │   └── instance/          # SQLite database directory (default)
 │       └── cron_jobs.db
-├── test/                   # Test suite directory
-│   ├── conftest.py        # Pytest fixtures and configuration
-│   ├── test_auth/         # Authentication tests
-│   │   └── test_login.py
-│   ├── test_jobs/         # Job management tests
-│   │   ├── test_create.py
-│   │   ├── test_retrieve.py
-│   │   ├── test_update.py
-│   │   └── test_delete_and_execute.py
-│   └── test_notifications/ # Notification feature tests
-│       └── test_email_toggle.py
+├── tests_fastapi/          # FastAPI test suite
 ├── venv/                  # Python virtual environment
 ├── create_admin.py        # Script to create initial admin user
 ├── requirements.txt       # Python dependencies
@@ -100,8 +80,8 @@ cron-job-backend/
 
 **Directory Organization:**
 - **src/** - All application source code
-- **test/** - Complete pytest test suite (94 tests)
-- **instance/** - Runtime data and databases
+- **tests_fastapi/** - FastAPI pytest suite
+- **src/instance/** - Runtime data and databases
 - **venv/** - Python virtual environment
 
 ## Setup Instructions
@@ -126,8 +106,8 @@ pip install -r requirements.txt
 ```
 
 **Environment Variables:**
-- `FLASK_DEBUG` - Debug mode (default: False)
-- `SECRET_KEY` - Flask secret key for session management
+- `DEBUG` - Debug mode (default: False)
+- `SECRET_KEY` - App secret key (used for JWT signing when `JWT_SECRET_KEY` is unset)
 - `JWT_SECRET_KEY` - JWT token signing key (defaults to SECRET_KEY)
 - `JWT_ACCESS_TOKEN_EXPIRES` - Access token expiration in seconds (default: 3600 = 1 hour)
 - `JWT_REFRESH_TOKEN_EXPIRES` - Refresh token expiration in seconds (default: 2592000 = 30 days)
@@ -158,22 +138,20 @@ pip install -r requirements.txt
 ## Key APIs
 
 - **PIC Teams**
-  - `GET /api/pic-teams`
-  - `POST /api/pic-teams` (admin)
-  - `PUT /api/pic-teams/<id>` (admin)
-  - `DELETE /api/pic-teams/<id>` (admin, disables)
+  - `GET /api/v2/pic-teams`
+  - `POST /api/v2/pic-teams` (admin)
+  - `PUT /api/v2/pic-teams/<id>` (admin)
+  - `DELETE /api/v2/pic-teams/<id>` (admin, disables)
 - **Slack Settings (admin)**
-  - `GET /api/settings/slack`
-  - `PUT /api/settings/slack`
+  - `GET /api/v2/settings/slack`
+  - `PUT /api/v2/settings/slack`
 - **UI Preferences (per user)**
-  - `GET /api/auth/users/<user_id>/ui-preferences`
-  - `PUT /api/auth/users/<user_id>/ui-preferences`
+  - `GET /api/v2/auth/users/<user_id>/ui-preferences`
+  - `PUT /api/v2/auth/users/<user_id>/ui-preferences`
 
 ## Scripts
 
-- `./start_server.sh` starts the backend on `http://localhost:5001`.
-  - It **does not wipe the database by default**.
-  - To wipe legacy DB files, run: `WIPE_DB=true ./start_server.sh`
+- `./start_fastapi.sh` starts the backend on `http://localhost:5001` (Swagger at `/docs`).
 ### 3. Configure Environment Variables
 
 ```bash
@@ -199,12 +177,9 @@ python create_admin.py
 ### 5. Run the Application
 
 ```bash
-# Run as Python module (recommended)
+# Run as Python module
 python -m src
 # Server will start on http://localhost:5001
-
-# Alternative: Run directly from src directory
-# python src/app.py
 ```
 
 ---
@@ -884,7 +859,7 @@ The API supports Cross-Origin Resource Sharing (CORS) for frontend integration.
 
 **Example CORS Test:**
 ```bash
-curl -i -X OPTIONS http://localhost:5001/api/jobs \
+curl -i -X OPTIONS http://localhost:5001/api/v2/jobs \
   -H "Origin: http://localhost:3000" \
   -H "Access-Control-Request-Method: POST" \
   -H "Access-Control-Request-Headers: Authorization, Content-Type"
@@ -895,19 +870,19 @@ curl -i -X OPTIONS http://localhost:5001/api/jobs \
 ## Architecture & Design
 
 ### Technology Stack
-- **Framework:** Flask 3.0.0
-- **Authentication:** Flask-JWT-Extended 4.6.0 for JWT token management
+- **Framework:** FastAPI
+- **Authentication:** JWT (PyJWT) with access/refresh tokens
 - **Password Hashing:** passlib 1.7.4 with PBKDF2-SHA256
-- **Scheduler:** APScheduler 3.10.4 with SQLAlchemy job store
-- **Database:** SQLAlchemy with SQLite (MySQL-ready)
+- **Scheduler:** APScheduler 3.10.4 (leader-only via lock + DB reconciliation)
+- **Database:** SQLAlchemy + SQLite (MySQL-ready)
 - **Validation:** croniter 2.0.1 for cron expression validation
 - **HTTP Client:** requests 2.31.0 for GitHub API and webhooks
-- **CORS:** Flask-CORS 4.0.0
+- **CORS:** Starlette `CORSMiddleware`
 
 ### Key Features
 
 **1. Application Factory Pattern**
-- Clean initialization in `create_app()` function
+- Initialization via `src/fastapi_app/main.py:create_app()`
 - Easy testing and configuration management
 
 **2. JWT Authentication & Authorization**
@@ -916,16 +891,14 @@ curl -i -X OPTIONS http://localhost:5001/api/jobs \
 - Secure password hashing with PBKDF2-SHA256
 - Job ownership tracking and enforcement
 
-**3. Blueprint Architecture**
-- Routes separated into `routes/auth.py` and `routes/jobs.py` Blueprints
-- Auth decorators for role-based protection
-- Reduced cognitive complexity
+**3. Router-Based Architecture**
+- Routers organized under `src/fastapi_app/routers/`
+- Dependency-injected auth + role checks
 - Better code organization
 
 **4. Scheduler Integration**
-- Background scheduler starts with Flask app
-- SQLAlchemy job store for persistence
-- Automatic job loading from database on startup
+- Background scheduler starts under FastAPI lifespan (leader-only)
+- DB → scheduler reconciliation keeps APScheduler aligned with stored jobs
 - CronTrigger for reliable scheduling
 
 **5. Database Design**

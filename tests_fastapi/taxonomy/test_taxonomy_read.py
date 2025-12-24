@@ -2,28 +2,26 @@ import pytest
 
 
 @pytest.fixture
-def seed_taxonomy(app, setup_test_db):
-    with app.app_context():
-        from src.models import db
-        from src.models.job_category import JobCategory
-        from src.models.pic_team import PicTeam
+def seed_taxonomy(db_session, setup_test_db):
+    from src.models.job_category import JobCategory
+    from src.models.pic_team import PicTeam
 
-        cat_active = JobCategory(slug="active", name="Active Category", is_active=True)
-        cat_inactive = JobCategory(slug="inactive", name="Inactive Category", is_active=False)
-        db.session.add_all([cat_active, cat_inactive])
+    cat_active = JobCategory(slug="active", name="Active Category", is_active=True)
+    cat_inactive = JobCategory(slug="inactive", name="Inactive Category", is_active=False)
+    db_session.add_all([cat_active, cat_inactive])
 
-        team_active = PicTeam(slug="team-a", name="Team A", slack_handle="@team-a", is_active=True)
-        team_inactive = PicTeam(slug="team-b", name="Team B", slack_handle="@team-b", is_active=False)
-        db.session.add_all([team_active, team_inactive])
+    team_active = PicTeam(slug="team-a", name="Team A", slack_handle="@team-a", is_active=True)
+    team_inactive = PicTeam(slug="team-b", name="Team B", slack_handle="@team-b", is_active=False)
+    db_session.add_all([team_active, team_inactive])
 
-        db.session.commit()
+    db_session.commit()
 
-        return {
-            "cat_active_id": cat_active.id,
-            "cat_inactive_id": cat_inactive.id,
-            "team_active_id": team_active.id,
-            "team_inactive_id": team_inactive.id,
-        }
+    return {
+        "cat_active_id": cat_active.id,
+        "cat_inactive_id": cat_inactive.id,
+        "team_active_id": team_active.id,
+        "team_inactive_id": team_inactive.id,
+    }
 
 
 @pytest.mark.asyncio
@@ -78,4 +76,3 @@ async def test_pic_teams_admin_can_include_inactive(async_client, admin_access_t
     assert resp.status_code == 200
     payload = resp.json()
     assert {t["slug"] for t in payload["pic_teams"]} == {"team-a", "team-b"}
-

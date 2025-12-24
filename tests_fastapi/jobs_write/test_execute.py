@@ -9,67 +9,65 @@ def _today_jst():
 
 
 @pytest.fixture
-def seed_execute_jobs(app, setup_test_db):
-    with app.app_context():
-        from src.models import db
-        from src.models.job import Job
+def seed_execute_jobs(db_session, setup_test_db):
+    from src.models.job import Job
 
-        admin = setup_test_db["admin"]
-        user = setup_test_db["user"]
+    admin = setup_test_db["admin"]
+    user = setup_test_db["user"]
 
-        webhook_job = Job(
-            name="execute-webhook-job",
-            cron_expression="0 * * * *",
-            end_date=_today_jst(),
-            created_by=user.id,
-            target_url="https://example.com/hook",
-            is_active=True,
-        )
-        webhook_job.set_metadata({"hello": "world"})
-        db.session.add(webhook_job)
+    webhook_job = Job(
+        name="execute-webhook-job",
+        cron_expression="0 * * * *",
+        end_date=_today_jst(),
+        created_by=user.id,
+        target_url="https://example.com/hook",
+        is_active=True,
+    )
+    webhook_job.set_metadata({"hello": "world"})
+    db_session.add(webhook_job)
 
-        github_job = Job(
-            name="execute-github-job",
-            cron_expression="15 * * * *",
-            end_date=_today_jst(),
-            created_by=user.id,
-            target_url=None,
-            github_owner="octo",
-            github_repo="repo",
-            github_workflow_name="workflow.yml",
-            is_active=True,
-        )
-        db.session.add(github_job)
+    github_job = Job(
+        name="execute-github-job",
+        cron_expression="15 * * * *",
+        end_date=_today_jst(),
+        created_by=user.id,
+        target_url=None,
+        github_owner="octo",
+        github_repo="repo",
+        github_workflow_name="workflow.yml",
+        is_active=True,
+    )
+    db_session.add(github_job)
 
-        expired_job = Job(
-            name="execute-expired-job",
-            cron_expression="0 * * * *",
-            end_date=_today_jst() - timedelta(days=1),
-            created_by=user.id,
-            target_url="https://example.com/hook",
-            is_active=True,
-        )
-        db.session.add(expired_job)
+    expired_job = Job(
+        name="execute-expired-job",
+        cron_expression="0 * * * *",
+        end_date=_today_jst() - timedelta(days=1),
+        created_by=user.id,
+        target_url="https://example.com/hook",
+        is_active=True,
+    )
+    db_session.add(expired_job)
 
-        admin_job = Job(
-            name="execute-admin-job",
-            cron_expression="30 * * * *",
-            end_date=_today_jst(),
-            created_by=admin.id,
-            target_url="https://example.com/hook",
-            is_active=True,
-        )
-        db.session.add(admin_job)
+    admin_job = Job(
+        name="execute-admin-job",
+        cron_expression="30 * * * *",
+        end_date=_today_jst(),
+        created_by=admin.id,
+        target_url="https://example.com/hook",
+        is_active=True,
+    )
+    db_session.add(admin_job)
 
-        db.session.commit()
+    db_session.commit()
 
-        return {
-            "webhook_job_id": webhook_job.id,
-            "github_job_id": github_job.id,
-            "expired_job_id": expired_job.id,
-            "admin_job_id": admin_job.id,
-            "original_webhook_target": webhook_job.target_url,
-        }
+    return {
+        "webhook_job_id": webhook_job.id,
+        "github_job_id": github_job.id,
+        "expired_job_id": expired_job.id,
+        "admin_job_id": admin_job.id,
+        "original_webhook_target": webhook_job.target_url,
+    }
 
 
 @pytest.mark.asyncio
@@ -232,4 +230,3 @@ async def test_execute_job_metadata_override_must_be_object(async_client, user_a
     assert resp.status_code == 400
     payload = resp.json()
     assert payload["error"] == "Invalid payload"
-

@@ -4,8 +4,8 @@ import pytest
 
 
 @pytest.fixture
-def fastapi_app_scheduler_enabled(db_urls, tmp_path, monkeypatch):
-    # db_urls fixture sets SCHEDULER_ENABLED=false; override for this specific app instance.
+def fastapi_app_scheduler_enabled(db_url, setup_db, tmp_path, monkeypatch):
+    # db_url fixture sets SCHEDULER_ENABLED=false/TESTING=true; override for this specific app instance.
     monkeypatch.setenv("TESTING", "false")
     monkeypatch.setenv("SCHEDULER_ENABLED", "true")
     monkeypatch.setenv("SCHEDULER_LOCK_PATH", str(tmp_path / "scheduler.lock"))

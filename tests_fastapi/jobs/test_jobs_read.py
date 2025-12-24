@@ -4,48 +4,46 @@ import pytest
 
 
 @pytest.fixture
-def seed_jobs(app, setup_test_db):
-    with app.app_context():
-        from src.models import db
-        from src.models.job import Job
-        from src.models.job_execution import JobExecution
+def seed_jobs(db_session, setup_test_db):
+    from src.models.job import Job
+    from src.models.job_execution import JobExecution
 
-        user = setup_test_db["user"]
+    user = setup_test_db["user"]
 
-        job_1 = Job(
-            name="job-1",
-            cron_expression="0 * * * *",
-            category="general",
-            created_by=user.id,
-            is_active=True,
-        )
-        job_1.set_metadata({"a": 1})
-        db.session.add(job_1)
+    job_1 = Job(
+        name="job-1",
+        cron_expression="0 * * * *",
+        category="general",
+        created_by=user.id,
+        is_active=True,
+    )
+    job_1.set_metadata({"a": 1})
+    db_session.add(job_1)
 
-        job_2 = Job(
-            name="job-2",
-            cron_expression="15 * * * *",
-            category="general",
-            created_by=user.id,
-            is_active=False,
-        )
-        db.session.add(job_2)
-        db.session.flush()
+    job_2 = Job(
+        name="job-2",
+        cron_expression="15 * * * *",
+        category="general",
+        created_by=user.id,
+        is_active=False,
+    )
+    db_session.add(job_2)
+    db_session.flush()
 
-        exec_1 = JobExecution(
-            job_id=job_1.id,
-            status="success",
-            trigger_type="manual",
-            started_at=datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
-        )
-        db.session.add(exec_1)
-        db.session.commit()
+    exec_1 = JobExecution(
+        job_id=job_1.id,
+        status="success",
+        trigger_type="manual",
+        started_at=datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+    )
+    db_session.add(exec_1)
+    db_session.commit()
 
-        return {
-            "job_1_id": job_1.id,
-            "job_2_id": job_2.id,
-            "exec_1_id": exec_1.id,
-        }
+    return {
+        "job_1_id": job_1.id,
+        "job_2_id": job_2.id,
+        "exec_1_id": exec_1.id,
+    }
 
 
 @pytest.mark.asyncio

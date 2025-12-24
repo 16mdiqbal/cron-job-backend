@@ -1,8 +1,7 @@
 """
 SQLAlchemy Engine Configuration.
 
-Creates database engines that can be shared between Flask and FastAPI.
-Supports both sync (Flask) and async (FastAPI) connections.
+Creates database engines for both sync and async access.
 """
 
 import os
@@ -24,8 +23,8 @@ def get_database_url(async_mode: bool = False) -> str:
     Returns:
         Database connection URL
     """
-    # For FastAPI (async), allow overriding via FASTAPI_DATABASE_URL.
-    # Defaults to DATABASE_URL to keep Flask/FastAPI in sync unless explicitly separated.
+    # For async usage, allow overriding via FASTAPI_DATABASE_URL.
+    # Defaults to DATABASE_URL unless explicitly separated.
     if async_mode:
         db_url = os.environ.get("FASTAPI_DATABASE_URL") or os.environ.get("DATABASE_URL", "")
     else:
@@ -56,7 +55,7 @@ def get_engine() -> Engine:
     """
     Get or create synchronous SQLAlchemy engine.
     
-    Used by Flask and for sync database operations.
+    Used by sync database operations/scripts.
     Cached for reuse across requests.
     
     Returns:

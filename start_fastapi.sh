@@ -1,8 +1,7 @@
 #!/bin/bash
 
 # FastAPI Server Startup Script
-# Cutover default: run FastAPI on port 5001 (Flask replacement).
-# To run alongside Flask, set FASTAPI_PORT=8001 (or any free port).
+# Default: run FastAPI on port 5001.
 
 set -e
 

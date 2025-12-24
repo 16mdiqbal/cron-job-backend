@@ -1,40 +1,43 @@
 import uuid
 from datetime import datetime, timezone
-from . import db
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String
+from sqlalchemy.orm import backref, relationship
+
+from .base import Base
 
 
-class UserNotificationPreferences(db.Model):
+class UserNotificationPreferences(Base):
     """
     User notification preferences model.
     Stores per-user notification settings.
     """
     __tablename__ = 'user_notification_preferences'
     
-    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = db.Column(db.String(36), db.ForeignKey('users.id'), unique=True, nullable=False)
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey('users.id'), unique=True, nullable=False)
     
     # Email notifications
-    email_on_job_success = db.Column(db.Boolean, default=True, nullable=False)
-    email_on_job_failure = db.Column(db.Boolean, default=True, nullable=False)
-    email_on_job_disabled = db.Column(db.Boolean, default=False, nullable=False)
+    email_on_job_success = Column(Boolean, default=True, nullable=False)
+    email_on_job_failure = Column(Boolean, default=True, nullable=False)
+    email_on_job_disabled = Column(Boolean, default=False, nullable=False)
     
     # Browser notifications
-    browser_notifications = db.Column(db.Boolean, default=True, nullable=False)
+    browser_notifications = Column(Boolean, default=True, nullable=False)
     
     # Reports
-    daily_digest = db.Column(db.Boolean, default=False, nullable=False)
-    weekly_report = db.Column(db.Boolean, default=True, nullable=False)
+    daily_digest = Column(Boolean, default=False, nullable=False)
+    weekly_report = Column(Boolean, default=True, nullable=False)
     
     # Timestamps
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = db.Column(
-        db.DateTime, 
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc)
     )
     
     # Relationship
-    user = db.relationship('User', backref=db.backref('notification_preferences', uselist=False))
+    user = relationship('User', backref=backref('notification_preferences', uselist=False))
     
     def __repr__(self):
         return f'<UserNotificationPreferences user_id={self.user_id}>'

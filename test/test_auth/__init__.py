@@ -1,3 +1,0 @@
-"""
-Test auth package initialization.
-"""

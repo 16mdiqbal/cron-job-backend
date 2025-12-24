@@ -4,54 +4,52 @@ import pytest
 
 
 @pytest.fixture
-def seed_job_executions(app, setup_test_db):
-    with app.app_context():
-        from src.models import db
-        from src.models.job import Job
-        from src.models.job_execution import JobExecution
+def seed_job_executions(db_session, setup_test_db):
+    from src.models.job import Job
+    from src.models.job_execution import JobExecution
 
-        user = setup_test_db["user"]
+    user = setup_test_db["user"]
 
-        job = Job(
-            name="job-exec",
-            cron_expression="0 * * * *",
-            category="general",
-            created_by=user.id,
-            is_active=True,
-        )
-        db.session.add(job)
-        db.session.flush()
+    job = Job(
+        name="job-exec",
+        cron_expression="0 * * * *",
+        category="general",
+        created_by=user.id,
+        is_active=True,
+    )
+    db_session.add(job)
+    db_session.flush()
 
-        exec_success = JobExecution(
-            job_id=job.id,
-            status="success",
-            trigger_type="manual",
-            started_at=datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
-            duration_seconds=10.0,
-        )
-        exec_failed = JobExecution(
-            job_id=job.id,
-            status="failed",
-            trigger_type="scheduled",
-            started_at=datetime(2025, 1, 2, 0, 0, 0, tzinfo=timezone.utc),
-            duration_seconds=20.0,
-        )
-        exec_running = JobExecution(
-            job_id=job.id,
-            status="running",
-            trigger_type="manual",
-            started_at=datetime(2025, 1, 3, 0, 0, 0, tzinfo=timezone.utc),
-        )
+    exec_success = JobExecution(
+        job_id=job.id,
+        status="success",
+        trigger_type="manual",
+        started_at=datetime(2025, 1, 1, 0, 0, 0, tzinfo=timezone.utc),
+        duration_seconds=10.0,
+    )
+    exec_failed = JobExecution(
+        job_id=job.id,
+        status="failed",
+        trigger_type="scheduled",
+        started_at=datetime(2025, 1, 2, 0, 0, 0, tzinfo=timezone.utc),
+        duration_seconds=20.0,
+    )
+    exec_running = JobExecution(
+        job_id=job.id,
+        status="running",
+        trigger_type="manual",
+        started_at=datetime(2025, 1, 3, 0, 0, 0, tzinfo=timezone.utc),
+    )
 
-        db.session.add_all([exec_success, exec_failed, exec_running])
-        db.session.commit()
+    db_session.add_all([exec_success, exec_failed, exec_running])
+    db_session.commit()
 
-        return {
-            "job_id": job.id,
-            "exec_success_id": exec_success.id,
-            "exec_failed_id": exec_failed.id,
-            "exec_running_id": exec_running.id,
-        }
+    return {
+        "job_id": job.id,
+        "exec_success_id": exec_success.id,
+        "exec_failed_id": exec_failed.id,
+        "exec_running_id": exec_running.id,
+    }
 
 
 @pytest.mark.asyncio
@@ -165,4 +163,3 @@ async def test_job_execution_stats(async_client, user_access_token, seed_job_exe
     assert stats["average_duration_seconds"] == 10.0
 
     assert payload["latest_execution"]["status"] == "running"
-

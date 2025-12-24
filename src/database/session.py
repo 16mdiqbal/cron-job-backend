@@ -1,7 +1,7 @@
 """
 SQLAlchemy Session Management.
 
-Provides session factories for both Flask (sync) and FastAPI (async).
+Provides session factories for both sync and async access.
 """
 
 from contextlib import contextmanager, asynccontextmanager
@@ -13,10 +13,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from .engine import get_engine, get_async_engine
 
 
-# Sync session factory (for Flask)
+# Sync session factory
 _sync_session_factory = None
 
-# Async session factory (for FastAPI)
+# Async session factory
 _async_session_factory = None
 
 
@@ -52,7 +52,7 @@ def get_db_session() -> Generator[Session, None, None]:
     """
     Context manager for sync database sessions.
     
-    Usage (Flask or scripts):
+    Usage (scripts / sync access):
         with get_db_session() as session:
             users = session.query(User).all()
     

@@ -85,6 +85,11 @@ async def lifespan(app: FastAPI):
     print(f"📚 API Documentation available at: http://{settings.host}:{settings.port}/docs")
     print(f"📖 ReDoc available at: http://{settings.host}:{settings.port}/redoc")
 
+    # Ensure DB schema + baseline seed data exists before scheduler starts.
+    from ..database.bootstrap import init_db
+
+    init_db()
+
     # Phase 8C: Scheduler lifecycle under FastAPI lifespan (leader-only via lock).
     from .scheduler_runtime import start_scheduler
     start_scheduler()
@@ -140,8 +145,8 @@ All protected endpoints require a JWT token in the Authorization header:
 Authorization: Bearer <your_jwt_token>
 ```
 
-### Migration Status
-🚧 This is the FastAPI v2 API running alongside the Flask v1 API during migration.
+### Status
+✅ FastAPI is the only backend (Flask removed).
         """,
         docs_url="/docs",
         redoc_url="/redoc",
