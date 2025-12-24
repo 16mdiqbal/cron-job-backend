@@ -879,7 +879,7 @@ This phase is intentionally split by **logical API grouping** to keep each unit 
 Verified:
 ```bash
 venv/bin/python -m pytest -q tests_fastapi
-# 220 passed
+# 229 passed
 ```
 
 ### Notes
@@ -891,7 +891,7 @@ venv/bin/python -m pytest -q tests_fastapi
 
 ## Phase 8: Scheduler Migration & Cutover (Days 25-30)
 
-### Status: 🟨 In Progress (8A ✅, 8B ✅, 8C ✅, 8D ✅, 8E ✅, 8G ✅, 8F ✅ — cutover execution pending)
+### Status: 🟨 In Progress (8A ✅, 8B ✅, 8C ✅, 8D ✅, 8E ✅, 8G ✅, 8F ✅ — local cutover smoke done; proxy/stability pending)
 
 ### Objective
 Migrate APScheduler runtime + scheduler side-effects to FastAPI and complete the cutover from Flask.
@@ -1108,13 +1108,25 @@ async def execute_job_async(job_id):
 - [x] Scheduler side-effects wired into FastAPI job write endpoints (create/update/delete/enable/disable)
 - [x] Cutover/rollback/deprecation runbook documented (Phase 8F)
 - [x] Frontend fully migrated to `/api/v2` (cron-job-frontend `VITE_API_URL`)
+- [x] Local cutover smoke test completed (FastAPI on `:5001` + frontend on `:5173`)
 - [ ] Proxy cutover completed with rollback option
 - [ ] Flask code removed after stability window
-- [ ] All tests passing (Flask + FastAPI suites)
+- [ ] All tests passing (FastAPI suite ✅; legacy Flask suite currently failing locally)
 
 ### Notes
 ```
-<!-- Add implementation notes here -->
+Local cutover execution (2025-12-24):
+- FastAPI started on `http://localhost:5001` via `./start_fastapi.sh` (scheduler enabled; lock: `src/instance/scheduler.lock`)
+- Frontend dev points to `VITE_API_URL=http://localhost:5001/api/v2`
+- Verified:
+  - `GET /api/v2/health` -> `scheduler_running=true`
+  - `GET /api/v2/scheduler/status` + `POST /api/v2/scheduler/resync` (admin)
+  - `POST /api/v2/auth/login` (admin/admin123)
+  - Created PIC team + created job + manual execute -> execution row created
+
+Current local test status:
+- FastAPI: `venv/bin/python -m pytest -q tests_fastapi` -> 229 passed
+- Flask (legacy): `venv/bin/python -m pytest -q test` -> failing (see pytest output)
 ```
 
 ---

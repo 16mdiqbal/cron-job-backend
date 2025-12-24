@@ -9,21 +9,42 @@ from datetime import timedelta
 # Add parent directory to path to import src modules
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from src.app import create_app
-from src.models import db
-from src.models.user import User
-from src.models.job import Job
+def _configure_test_db(*, database_url: str) -> None:
+    """
+    Ensure legacy Flask tests never touch the real dev SQLite DB.
+
+    This must run BEFORE create_app(), because create_app() calls db.create_all()
+    using the URI from src.config.Config (evaluated at import-time).
+    """
+    os.environ["SCHEDULER_ENABLED"] = "false"
+    os.environ["TESTING"] = "true"
+    os.environ["ALLOW_DEFAULT_ADMIN"] = "false"
+    os.environ["DATABASE_URL"] = database_url
+
+    import src.config as flask_config
+
+    flask_config.Config.SQLALCHEMY_DATABASE_URI = database_url
+    flask_config.Config.ALLOW_DEFAULT_ADMIN = False
+    flask_config.Config.DEBUG = False
 
 
 @pytest.fixture(scope='function')
-def app():
+def db_url(tmp_path):
+    db_path = tmp_path / "legacy_flask_test.db"
+    return f"sqlite:///{db_path}"
+
+
+@pytest.fixture(scope='function')
+def app(db_url):
     """Create and configure a test application instance."""
-    # Disable scheduler before creating app
-    os.environ['SCHEDULER_ENABLED'] = 'false'
-    
+    _configure_test_db(database_url=db_url)
+
+    from src.app import create_app
+    from src.models import db
+
     app = create_app()
     app.config['TESTING'] = True
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_url
     app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=1)
     
     # Create fresh database for each test
@@ -36,9 +57,6 @@ def app():
         # Clean up after test
         db.session.remove()
         db.drop_all()
-    
-    # Re-enable scheduler after test
-    os.environ['SCHEDULER_ENABLED'] = 'true'
 
 
 @pytest.fixture(scope='function')
@@ -51,6 +69,9 @@ def client(app):
 def admin_user(app):
     """Create an admin user for testing."""
     with app.app_context():
+        from src.models import db
+        from src.models.user import User
+
         admin = User(
             username='admin',
             email='admin@example.com',
@@ -66,6 +87,9 @@ def admin_user(app):
 def regular_user(app):
     """Create a regular user for testing."""
     with app.app_context():
+        from src.models import db
+        from src.models.user import User
+
         user = User(
             username='user',
             email='user@example.com',
@@ -81,6 +105,9 @@ def regular_user(app):
 def viewer_user(app):
     """Create a viewer user for testing."""
     with app.app_context():
+        from src.models import db
+        from src.models.user import User
+
         user = User(
             username='viewer',
             email='viewer@example.com',
