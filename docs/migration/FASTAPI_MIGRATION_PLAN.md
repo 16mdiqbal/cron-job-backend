@@ -335,7 +335,7 @@ To prevent Flask's background scheduler from interfering with FastAPI tests, Fas
 python scripts/init_fastapi_db.py
 ```
 
-See [DATABASE_SEPARATION.md](DATABASE_SEPARATION.md) for details.
+See [`docs/database/DATABASE_SEPARATION.md`](../database/DATABASE_SEPARATION.md) for details.
 
 ---
 
