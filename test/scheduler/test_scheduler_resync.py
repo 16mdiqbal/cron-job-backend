@@ -16,15 +16,15 @@ def scheduler_env_with_resync(db_url, setup_test_db, tmp_path, monkeypatch):
     monkeypatch.setenv("SCHEDULER_LOCK_PATH", str(tmp_path / "scheduler.lock"))
     monkeypatch.setenv("SCHEDULER_POLL_SECONDS", "300")
 
-    from src.fastapi_app.config import get_settings
-    from src.fastapi_app import scheduler_runtime
+    from src.app.config import get_settings
+    from src.app import scheduler_runtime
     from src.scheduler import scheduler as apscheduler
 
     get_settings.cache_clear()
     scheduler_runtime.stop_scheduler()
     scheduler_runtime._reset_for_tests()
 
-    from src.fastapi_app.main import create_app as create_fastapi_app
+    from src.app.main import create_app as create_fastapi_app
 
     app = create_fastapi_app()
 
@@ -56,7 +56,7 @@ async def test_startup_resync_bootstraps_existing_db_job(scheduler_env_with_resy
     db_session.refresh(job)
     job_id = job.id
 
-    from src.fastapi_app import scheduler_runtime
+    from src.app import scheduler_runtime
     from src.scheduler import scheduler as apscheduler
 
     started = scheduler_runtime.start_scheduler()
@@ -66,7 +66,7 @@ async def test_startup_resync_bootstraps_existing_db_job(scheduler_env_with_resy
 
 @pytest.mark.asyncio
 async def test_resync_endpoint_removes_orphaned_scheduler_jobs(scheduler_env_with_resync, admin_access_token):
-    from src.fastapi_app import scheduler_runtime
+    from src.app import scheduler_runtime
 
     started = scheduler_runtime.start_scheduler()
     assert started is True
@@ -114,8 +114,8 @@ async def test_resync_auto_pauses_expired_jobs(scheduler_env_with_resync, db_ses
     db_session.refresh(job)
     job_id = job.id
 
-    from src.fastapi_app import scheduler_runtime
-    from src.fastapi_app.scheduler_reconcile import resync_from_db
+    from src.app import scheduler_runtime
+    from src.app.scheduler_reconcile import resync_from_db
     from src.database.session import get_db_session
     from src.models.job import Job
     from src.scheduler import scheduler as apscheduler

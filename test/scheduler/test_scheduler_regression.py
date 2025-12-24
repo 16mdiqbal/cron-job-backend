@@ -17,8 +17,8 @@ def scheduler_env(db_url, setup_test_db, tmp_path, monkeypatch):
     monkeypatch.setenv("SCHEDULER_LOCK_PATH", str(tmp_path / "scheduler.lock"))
     monkeypatch.setenv("SCHEDULER_TIMEZONE", "Asia/Tokyo")
 
-    from src.fastapi_app.config import get_settings
-    from src.fastapi_app import scheduler_runtime
+    from src.app.config import get_settings
+    from src.app import scheduler_runtime
     from src.scheduler import scheduler as apscheduler
 
     get_settings.cache_clear()
@@ -53,7 +53,7 @@ def seed_team_and_category(db_session):
 @pytest.mark.asyncio
 async def test_timezone_correctness_on_scheduled_job(scheduler_env, seed_team_and_category, user_access_token):
     from httpx import ASGITransport, AsyncClient
-    from src.fastapi_app.main import create_app as create_fastapi_app
+    from src.app.main import create_app as create_fastapi_app
 
     fastapi_app = create_fastapi_app()
     transport = ASGITransport(app=fastapi_app)
@@ -84,7 +84,7 @@ async def test_timezone_correctness_on_scheduled_job(scheduler_env, seed_team_an
 
 def test_duplicate_prevention_replace_existing(scheduler_env, seed_team_and_category, db_session, setup_test_db):
     from src.models.job import Job
-    from src.fastapi_app.scheduler_side_effects import sync_job_schedule
+    from src.app.scheduler_side_effects import sync_job_schedule
     from src.scheduler import scheduler as apscheduler
 
     user_id = setup_test_db["user"].id
@@ -122,8 +122,8 @@ def test_duplicate_prevention_replace_existing(scheduler_env, seed_team_and_cate
 
 def test_leader_only_guard_prevents_side_effects(scheduler_env, seed_team_and_category, db_session, setup_test_db):
     from src.models.job import Job
-    from src.fastapi_app import scheduler_runtime
-    from src.fastapi_app.scheduler_side_effects import sync_job_schedule
+    from src.app import scheduler_runtime
+    from src.app.scheduler_side_effects import sync_job_schedule
     from src.scheduler import scheduler as apscheduler
 
     user_id = setup_test_db["user"].id
@@ -151,7 +151,7 @@ def test_leader_only_guard_prevents_side_effects(scheduler_env, seed_team_and_ca
 
 def test_end_date_expired_job_is_unscheduled_on_sync(scheduler_env, seed_team_and_category, db_session, setup_test_db):
     from src.models.job import Job
-    from src.fastapi_app.scheduler_side_effects import sync_job_schedule
+    from src.app.scheduler_side_effects import sync_job_schedule
     from src.scheduler import scheduler as apscheduler
 
     user_id = setup_test_db["user"].id

@@ -6,6 +6,8 @@
 > **Estimated Duration:** 30 working days (~6 weeks)
 
 > **Status (Cutover):** ✅ Migration completed — FastAPI is the only backend and Flask code has been removed.
+>
+> **Note (Post-Cutover Cleanup):** The FastAPI package folder was later renamed from `src/fastapi_app/` to `src/app/` to reflect FastAPI-only reality.
 
 ---
 
@@ -1295,7 +1297,7 @@ pip install -r requirements.txt
 cd /path/to/cron-job-backend
 source venv/bin/activate
 ./start_fastapi.sh
-# Or: uvicorn src.fastapi_app.main:app --reload --port 5001
+# Or: uvicorn src.app.main:app --reload --port 5001
 ```
 
 ### Step 3: Verify

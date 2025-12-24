@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 import jwt
 import pytest
 
-from src.fastapi_app.config import get_settings
+from src.app.config import get_settings
 
 
 @pytest.mark.asyncio

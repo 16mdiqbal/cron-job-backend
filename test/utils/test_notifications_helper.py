@@ -2,7 +2,7 @@ import pytest
 from sqlalchemy import select
 
 from src.database.session import get_async_db_session
-from src.fastapi_app.utils.notifications import create_notification
+from src.app.utils.notifications import create_notification
 from src.models.notification import Notification
 
 

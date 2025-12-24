@@ -1,7 +1,7 @@
 import httpx
 import pytest
 
-from src.fastapi_app.utils.slack import send_slack_webhook
+from src.app.utils.slack import send_slack_webhook
 
 
 @pytest.mark.asyncio

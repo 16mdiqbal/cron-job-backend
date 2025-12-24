@@ -10,13 +10,13 @@ def fastapi_app_scheduler_enabled(db_url, setup_db, tmp_path, monkeypatch):
     monkeypatch.setenv("SCHEDULER_ENABLED", "true")
     monkeypatch.setenv("SCHEDULER_LOCK_PATH", str(tmp_path / "scheduler.lock"))
 
-    from src.fastapi_app.config import get_settings
-    from src.fastapi_app import scheduler_runtime
+    from src.app.config import get_settings
+    from src.app import scheduler_runtime
 
     get_settings.cache_clear()
     scheduler_runtime._reset_for_tests()
 
-    from src.fastapi_app.main import create_app as create_fastapi_app
+    from src.app.main import create_app as create_fastapi_app
 
     return create_fastapi_app()
 
@@ -33,7 +33,7 @@ async def test_scheduler_does_not_start_in_tests_by_default(async_client):
 @pytest.mark.asyncio
 async def test_scheduler_starts_when_enabled_and_reports_health(fastapi_app_scheduler_enabled):
     # httpx.ASGITransport (0.28+) does not run ASGI lifespan hooks; start/stop explicitly here.
-    from src.fastapi_app import scheduler_runtime
+    from src.app import scheduler_runtime
 
     started = scheduler_runtime.start_scheduler()
     assert started is True

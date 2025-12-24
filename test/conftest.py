@@ -18,7 +18,7 @@ def db_url(tmp_path, monkeypatch):
     monkeypatch.setenv("FASTAPI_DATABASE_URL", database_url)
 
     # Clear cached settings/engines/session factories so each test uses its own temp DB.
-    from src.fastapi_app.config import get_settings
+    from src.app.config import get_settings
     from src.database import engine as db_engine
     from src.database import session as db_session
 
@@ -51,7 +51,7 @@ def db_session(setup_db):
 @pytest.fixture(scope="function")
 def fastapi_app(db_url):
     assert os.environ.get("DATABASE_URL") == db_url
-    from src.fastapi_app.main import create_app as create_fastapi_app
+    from src.app.main import create_app as create_fastapi_app
 
     return create_fastapi_app()
 
@@ -99,7 +99,7 @@ def setup_test_db(db_session):
 @pytest.fixture
 def admin_access_token(setup_test_db):
     admin = setup_test_db["admin"]
-    from src.fastapi_app.dependencies.auth import create_access_token
+    from src.app.dependencies.auth import create_access_token
 
     return create_access_token(user_id=admin.id, role=admin.role, email=admin.email)
 
@@ -107,7 +107,7 @@ def admin_access_token(setup_test_db):
 @pytest.fixture
 def user_access_token(setup_test_db):
     user = setup_test_db["user"]
-    from src.fastapi_app.dependencies.auth import create_access_token
+    from src.app.dependencies.auth import create_access_token
 
     return create_access_token(user_id=user.id, role=user.role, email=user.email)
 
@@ -115,7 +115,7 @@ def user_access_token(setup_test_db):
 @pytest.fixture
 def viewer_access_token(setup_test_db):
     viewer = setup_test_db["viewer"]
-    from src.fastapi_app.dependencies.auth import create_access_token
+    from src.app.dependencies.auth import create_access_token
 
     return create_access_token(user_id=viewer.id, role=viewer.role, email=viewer.email)
 
@@ -123,7 +123,7 @@ def viewer_access_token(setup_test_db):
 @pytest.fixture
 def admin_refresh_token(setup_test_db):
     admin = setup_test_db["admin"]
-    from src.fastapi_app.dependencies.auth import create_refresh_token
+    from src.app.dependencies.auth import create_refresh_token
 
     return create_refresh_token(user_id=admin.id, role=admin.role, email=admin.email)
 

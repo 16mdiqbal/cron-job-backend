@@ -133,7 +133,7 @@ async def test_execute_webhook_success_uses_overrides_and_records_execution(
         captured["json"] = json_payload
         return 200, "ok"
 
-    monkeypatch.setattr("src.fastapi_app.routers.jobs._http_request", fake_http_request)
+    monkeypatch.setattr("src.app.routers.jobs._http_request", fake_http_request)
 
     override_url = "https://override.example.com/hook"
     override_metadata = {"run": "manual"}
@@ -180,7 +180,7 @@ async def test_execute_github_success_records_execution(async_client, user_acces
         captured["url"] = url
         return 204, ""
 
-    monkeypatch.setattr("src.fastapi_app.routers.jobs._http_request", fake_http_request)
+    monkeypatch.setattr("src.app.routers.jobs._http_request", fake_http_request)
 
     resp = await async_client.post(
         f"/api/v2/jobs/{job_id}/execute",

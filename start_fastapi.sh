@@ -65,7 +65,7 @@ echo -e "${GREEN}▶️  Starting uvicorn on port $PORT...${NC}"
 cd "$SCRIPT_DIR"
 
 # Development mode with hot reload
-uvicorn src.fastapi_app.main:app \
+uvicorn src.app.main:app \
     --host $HOST \
     --port $PORT \
     --reload \

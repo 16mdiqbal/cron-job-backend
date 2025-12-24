@@ -53,7 +53,7 @@ In the same process (optional/typical):
 
 The code is intentionally split into a few layers:
 
-- `src/fastapi_app/` — API layer + request validation + scheduler runtime wiring
+- `src/app/` — API layer + request validation + scheduler runtime wiring
 - `src/models/` — SQLAlchemy declarative models (DB schema)
 - `src/database/` — engine/session creation for sync+async usage
 - `src/scheduler/` — APScheduler instance + lock + execution logic
@@ -61,7 +61,7 @@ The code is intentionally split into a few layers:
 - `src/utils/` — cross-cutting utilities (SQLite schema guard, SMTP email, Slack helper)
 
 Key entry points:
-- API app: `src/fastapi_app/main.py` (`uvicorn src.fastapi_app.main:app`)
+- API app: `src/app/main.py` (`uvicorn src.app.main:app`)
 - Development start script: `start_fastapi.sh`
 - DB init script: `scripts/init_fastapi_db.py`
 - Create admin: `scripts/create_admin.py`
@@ -70,41 +70,41 @@ Key entry points:
 
 ### 3.1 App Startup / Lifespan
 
-`src/fastapi_app/main.py` is the canonical entrypoint.
+`src/app/main.py` is the canonical entrypoint.
 
 Startup responsibilities:
-- Load settings via `src/fastapi_app/config.py` (Pydantic settings from `.env` + environment)
+- Load settings via `src/app/config.py` (Pydantic settings from `.env` + environment)
 - Initialize DB schema and seed baseline data via `src/database/bootstrap.py:init_db()`
-- Start APScheduler lifecycle via `src/fastapi_app/scheduler_runtime.py:start_scheduler()`
+- Start APScheduler lifecycle via `src/app/scheduler_runtime.py:start_scheduler()`
 
 Shutdown responsibilities:
-- Stop scheduler via `src/fastapi_app/scheduler_runtime.py:stop_scheduler()`
+- Stop scheduler via `src/app/scheduler_runtime.py:stop_scheduler()`
 
 ### 3.2 Router Composition
 
-Routers live under `src/fastapi_app/routers/` and are mounted by `register_routers(...)` in `src/fastapi_app/main.py`.
+Routers live under `src/app/routers/` and are mounted by `register_routers(...)` in `src/app/main.py`.
 
 High-level groups:
-- Auth: `src/fastapi_app/routers/auth.py` (`/api/v2/auth/*`)
-- Jobs (read + write + bulk upload + execute): `src/fastapi_app/routers/jobs.py` (`/api/v2/jobs/*`)
-- Executions: `src/fastapi_app/routers/executions.py` (`/api/v2/jobs/{id}/executions/*` + `/api/v2/executions/*`)
-- Notifications: `src/fastapi_app/routers/notifications.py` (`/api/v2/notifications/*`)
-- Taxonomy read: `src/fastapi_app/routers/taxonomy.py` (`/api/v2/job-categories`, `/api/v2/pic-teams`)
-- Taxonomy write: `src/fastapi_app/routers/taxonomy_write.py` (admin-only writes)
-- Slack settings: `src/fastapi_app/routers/settings.py`
-- Scheduler ops: `src/fastapi_app/routers/scheduler.py` (`/api/v2/scheduler/status|resync`)
+- Auth: `src/app/routers/auth.py` (`/api/v2/auth/*`)
+- Jobs (read + write + bulk upload + execute): `src/app/routers/jobs.py` (`/api/v2/jobs/*`)
+- Executions: `src/app/routers/executions.py` (`/api/v2/jobs/{id}/executions/*` + `/api/v2/executions/*`)
+- Notifications: `src/app/routers/notifications.py` (`/api/v2/notifications/*`)
+- Taxonomy read: `src/app/routers/taxonomy.py` (`/api/v2/job-categories`, `/api/v2/pic-teams`)
+- Taxonomy write: `src/app/routers/taxonomy_write.py` (admin-only writes)
+- Slack settings: `src/app/routers/settings.py`
+- Scheduler ops: `src/app/routers/scheduler.py` (`/api/v2/scheduler/status|resync`)
 
 ### 3.3 Error Handling
 
 - Most routers return `JSONResponse` with a stable `{error, message}` shape on failures.
-- `src/fastapi_app/main.py` also registers a global exception handler for unexpected errors.
+- `src/app/main.py` also registers a global exception handler for unexpected errors.
 - When `EXPOSE_ERROR_DETAILS=true`, errors may include exception strings for debugging.
 
 ## 4) Authentication & Authorization (JWT)
 
 Auth is implemented with PyJWT and designed to be compatible with Flask-JWT-Extended token structure.
 
-- Core helpers: `src/fastapi_app/dependencies/auth.py`
+- Core helpers: `src/app/dependencies/auth.py`
 - Tokens:
   - Access token (`type=access`, default expiry `JWT_ACCESS_TOKEN_EXPIRES`, default 3600s)
   - Refresh token (`type=refresh`, default expiry `JWT_REFRESH_TOKEN_EXPIRES`, default 30d)
@@ -186,7 +186,7 @@ Important relationships:
 
 - APScheduler singleton: `src/scheduler/__init__.py` (imported as `src.scheduler.scheduler`)
 - Leadership lock: `src/scheduler/lock.py:SchedulerLock`
-- Runtime wiring: `src/fastapi_app/scheduler_runtime.py`
+- Runtime wiring: `src/app/scheduler_runtime.py`
 
 Key concept: **leader-only scheduling**
 - Multiple API instances may run, but only one should execute scheduled jobs.
@@ -203,7 +203,7 @@ Useful env vars:
 
 ### 6.2 DB → Scheduler Reconciliation
 
-Reconciler: `src/fastapi_app/scheduler_reconcile.py`
+Reconciler: `src/app/scheduler_reconcile.py`
 
 What it does:
 - Reads all jobs from DB
@@ -218,8 +218,8 @@ Ops endpoint:
 ### 6.3 Write-Side Scheduler Side Effects
 
 Job CRUD endpoints try to keep the scheduler consistent immediately (best-effort):
-- `src/fastapi_app/scheduler_side_effects.py:sync_job_schedule(...)`
-- `src/fastapi_app/scheduler_side_effects.py:unschedule_job(...)`
+- `src/app/scheduler_side_effects.py:sync_job_schedule(...)`
+- `src/app/scheduler_side_effects.py:unschedule_job(...)`
 
 Important behavior:
 - These helpers **never fail** the API request if the scheduler is not leader/running.
@@ -251,14 +251,14 @@ Execution logic: `src/scheduler/job_executor.py`
 ### 8.1 In-app Notifications
 
 - Stored in table `notifications` (`src/models/notification.py`)
-- Read/write APIs: `src/fastapi_app/routers/notifications.py`
+- Read/write APIs: `src/app/routers/notifications.py`
 
 Common notification types:
 - `success`, `error`, `warning`, `info`
 
 ### 8.2 Slack Integration
 
-- Global webhook + channel stored in `slack_settings` (admin-managed) via `src/fastapi_app/routers/settings.py`
+- Global webhook + channel stored in `slack_settings` (admin-managed) via `src/app/routers/settings.py`
 - Each PIC team has an optional `slack_handle` for mention routing (`src/models/pic_team.py`)
 - Weekly reminders + auto-pause messages can post to Slack:
   - Service: `src/services/end_date_maintenance.py`

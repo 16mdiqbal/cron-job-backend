@@ -58,7 +58,7 @@ async def test_test_run_webhook_success(async_client, user_access_token, monkeyp
         assert timeout == 3.0
         return 200, "ok"
 
-    monkeypatch.setattr("src.fastapi_app.routers.jobs._http_request", fake_http_request)
+    monkeypatch.setattr("src.app.routers.jobs._http_request", fake_http_request)
 
     resp = await async_client.post(
         "/api/v2/jobs/test-run",
@@ -98,7 +98,7 @@ async def test_test_run_github_success(async_client, user_access_token, monkeypa
         captured["headers"] = headers
         return 204, ""
 
-    monkeypatch.setattr("src.fastapi_app.routers.jobs._http_request", fake_http_request)
+    monkeypatch.setattr("src.app.routers.jobs._http_request", fake_http_request)
 
     resp = await async_client.post(
         "/api/v2/jobs/test-run",

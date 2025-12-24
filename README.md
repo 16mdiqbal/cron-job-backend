@@ -36,7 +36,7 @@ cron-job-backend/
 │   ├── __init__.py        # Package marker
 │   ├── __main__.py        # Module entry point (python -m src)
 │   ├── database/          # SQLAlchemy engines + session factories
-│   ├── fastapi_app/       # FastAPI v2 app + routers (/api/v2/*)
+│   ├── app/               # FastAPI v2 app + routers (/api/v2/*)
 │   ├── models/
 │   │   ├── __init__.py
 │   │   ├── user.py        # User model with authentication
@@ -882,7 +882,7 @@ curl -i -X OPTIONS http://localhost:5001/api/v2/jobs \
 ### Key Features
 
 **1. Application Factory Pattern**
-- Initialization via `src/fastapi_app/main.py:create_app()`
+- Initialization via `src/app/main.py:create_app()`
 - Easy testing and configuration management
 
 **2. JWT Authentication & Authorization**
@@ -892,7 +892,7 @@ curl -i -X OPTIONS http://localhost:5001/api/v2/jobs \
 - Job ownership tracking and enforcement
 
 **3. Router-Based Architecture**
-- Routers organized under `src/fastapi_app/routers/`
+- Routers organized under `src/app/routers/`
 - Dependency-injected auth + role checks
 - Better code organization
 
