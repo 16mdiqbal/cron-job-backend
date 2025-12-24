@@ -227,9 +227,7 @@ async def mark_notification_read(
             )
 
         if not notification.is_read:
-            notification.is_read = True
-            notification.read_at = datetime.utcnow()
-            await db.commit()
+            await notification.mark_as_read(db)
             await db.refresh(notification)
 
         return NotificationMarkReadResponse(

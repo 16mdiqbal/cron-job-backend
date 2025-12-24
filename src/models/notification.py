@@ -1,6 +1,8 @@
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text
+from sqlalchemy.ext.asyncio import AsyncSession, async_object_session
 from sqlalchemy.orm import backref, relationship
 
 from .base import Base
@@ -73,8 +75,24 @@ class Notification(Base):
             'created_at': created_at_str
         }
 
-    def mark_as_read(self):
-        """Mark notification as read."""
-        if not self.is_read:
-            self.is_read = True
-            self.read_at = datetime.now(timezone.utc)
+    async def mark_as_read(self, db: Optional[AsyncSession] = None, *, commit: bool = True) -> bool:
+        """
+        Mark notification as read and persist the change.
+
+        Returns True if the notification was updated, otherwise False.
+        """
+        if self.is_read:
+            return False
+
+        self.is_read = True
+        self.read_at = datetime.now(timezone.utc)
+
+        if not commit:
+            return True
+
+        session = db or async_object_session(self)
+        if session is None:
+            raise RuntimeError("Notification is not attached to a session; pass `db` to persist changes.")
+
+        await session.commit()
+        return True
