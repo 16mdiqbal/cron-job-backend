@@ -4,6 +4,7 @@
 # Default: run FastAPI on port 5001.
 
 set -e
+set -o pipefail
 
 # Colors for output
 RED='\033[0;31m'
@@ -15,6 +16,16 @@ echo -e "${GREEN}🚀 Starting FastAPI Server...${NC}"
 
 # Get the directory where the script is located
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+
+# Logs
+LOG_DIR="${SCRIPT_DIR}/logs"
+LOG_FILE="${FASTAPI_LOG_FILE:-${LOG_DIR}/fastapi.log}"
+LOG_TO_FILE="${FASTAPI_LOG_TO_FILE:-true}"
+mkdir -p "$LOG_DIR"
+if [[ "${LOG_TO_FILE}" != "false" ]]; then
+    exec > >(tee -a "$LOG_FILE") 2>&1
+    echo -e "${YELLOW}📝 Logging to ${LOG_FILE}${NC}"
+fi
 
 # Activate virtual environment if it exists
 if [ -d "$SCRIPT_DIR/venv" ]; then
