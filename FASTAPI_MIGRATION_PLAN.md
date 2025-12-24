@@ -1273,11 +1273,11 @@ src/
 ### Prerequisites
 
 ```bash
-# Python 3.9+ required
-python --version  # Should be 3.9+
+# Python 3.12+ required
+python3.12 --version  # Should be 3.12+
 
 # Create virtual environment (if not exists)
-python -m venv venv
+python3.12 -m venv venv
 source venv/bin/activate  # macOS/Linux
 ```
 

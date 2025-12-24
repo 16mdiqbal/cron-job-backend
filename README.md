@@ -90,7 +90,7 @@ cron-job-backend/
 
 ```bash
 # Create virtual environment
-python3.11 -m venv venv
+python3.12 -m venv venv
 
 # Activate virtual environment
 # On macOS/Linux:
@@ -102,7 +102,11 @@ source venv/bin/activate
 ### 2. Install Dependencies
 
 ```bash
+# Runtime dependencies
 pip install -r requirements.txt
+
+# Dev/test dependencies
+pip install -r requirements-dev.txt
 ```
 
 **Environment Variables:**
