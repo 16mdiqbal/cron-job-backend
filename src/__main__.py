@@ -1,14 +1,14 @@
 """
 Allow src to be run as a module: python -m src
 """
-from .app import app
+import os
+
+import uvicorn
+
+from .app.config import get_settings
 
 if __name__ == '__main__':
-    try:
-        app.run(host='0.0.0.0', port=5001, debug=app.config['DEBUG'])
-    except (KeyboardInterrupt, SystemExit):
-        from .scheduler import scheduler
-        # Gracefully shut down scheduler on exit
-        if scheduler.running:
-            scheduler.shutdown()
-        raise
+    settings = get_settings()
+    port = int(os.getenv("FASTAPI_PORT") or settings.port)
+    host = os.getenv("FASTAPI_HOST") or settings.host
+    uvicorn.run("src.app.main:app", host=host, port=port, log_level="info")

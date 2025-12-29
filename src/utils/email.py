@@ -1,198 +1,169 @@
 """
-Email notification utility for sending job failure alerts.
+Email notification helpers (FastAPI/Flask-free).
+
+Historically this project used Flask-Mail and `current_app`. After the FastAPI cutover,
+we send notifications directly via SMTP so scheduler jobs don't require any Flask app context.
 """
 
+from __future__ import annotations
+
 import logging
-from flask_mail import Mail, Message
-from flask import current_app
+import os
+import smtplib
+import ssl
+from email.message import EmailMessage
+from typing import Iterable, Optional, Sequence
 
 logger = logging.getLogger(__name__)
 
-# Initialize Mail object (will be configured in app factory)
-mail = Mail()
 
-
-def send_job_failure_notification(job_name, job_id, error_message, recipient_emails):
-    """
-    Send an email notification when a job fails.
-    
-    Args:
-        job_name (str): The name of the failed job
-        job_id (str): The unique identifier of the job
-        error_message (str): The error message from the failed job
-        recipient_emails (list or str): Email address(es) to send notification to
-    
-    Returns:
-        bool: True if email sent successfully, False otherwise
-    """
-    
-    # Check if email notifications are enabled
-    if not current_app.config.get('MAIL_ENABLED', True):
-        logger.debug("Email notifications are disabled")
-        return False
-    
-    # Check if email is configured
-    if not current_app.config.get('MAIL_USERNAME'):
-        logger.warning("Email is not configured. Skipping notification.")
-        return False
-    
-    # Convert single email to list
-    if isinstance(recipient_emails, str):
-        recipient_emails = [recipient_emails]
-    
-    # Filter out empty emails
-    recipient_emails = [email for email in recipient_emails if email]
-    
-    if not recipient_emails:
-        logger.warning(f"No recipient emails configured for job '{job_name}'")
-        return False
-    
-    try:
-        subject = f"🔴 Job Failure Alert: {job_name}"
-        
-        html_body = f"""
-        <html>
-            <body style="font-family: Arial, sans-serif; color: #333;">
-                <div style="max-width: 600px; margin: 0 auto;">
-                    <h2 style="color: #d32f2f;">Job Execution Failed</h2>
-                    <p>The following scheduled job has failed:</p>
-                    
-                    <div style="background-color: #f5f5f5; padding: 15px; border-left: 4px solid #d32f2f; margin: 20px 0;">
-                        <p><strong>Job Name:</strong> {job_name}</p>
-                        <p><strong>Job ID:</strong> {job_id}</p>
-                        <p><strong>Error:</strong> <code style="background-color: #fff3cd; padding: 5px; border-radius: 3px;">{error_message}</code></p>
-                    </div>
-                    
-                    <p style="color: #666; font-size: 14px;">
-                        Please review your job configuration and logs to identify and resolve the issue.
-                    </p>
-                    
-                    <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
-                    <p style="color: #999; font-size: 12px;">
-                        This is an automated notification from Cron Job Scheduler. Please do not reply to this email.
-                    </p>
-                </div>
-            </body>
-        </html>
-        """
-        
-        text_body = f"""
-        Job Execution Failed
-        ====================
-        
-        Job Name: {job_name}
-        Job ID: {job_id}
-        Error: {error_message}
-        
-        Please review your job configuration and logs to identify and resolve the issue.
-        
-        This is an automated notification from Cron Job Scheduler.
-        """
-        
-        msg = Message(
-            subject=subject,
-            recipients=recipient_emails,
-            html=html_body,
-            body=text_body
-        )
-        
-        mail.send(msg)
-        logger.info(f"Failure notification sent for job '{job_name}' to {', '.join(recipient_emails)}")
+def _env_bool(name: str, default: bool) -> bool:
+    raw = (os.getenv(name) or "").strip().lower()
+    if raw in {"true", "1", "yes", "y"}:
         return True
-    
-    except Exception as e:
-        logger.error(f"Failed to send email notification for job '{job_name}': {str(e)}")
+    if raw in {"false", "0", "no", "n"}:
         return False
+    return default
 
 
-def send_job_success_notification(job_name, job_id, duration_seconds, recipient_emails):
-    """
-    Send an email notification when a job succeeds (optional, for critical jobs).
-    
-    Args:
-        job_name (str): The name of the successful job
-        job_id (str): The unique identifier of the job
-        duration_seconds (float): The duration of job execution in seconds
-        recipient_emails (list or str): Email address(es) to send notification to
-    
-    Returns:
-        bool: True if email sent successfully, False otherwise
-    """
-    
-    # Check if email notifications are enabled
-    if not current_app.config.get('MAIL_ENABLED', True):
-        logger.debug("Email notifications are disabled")
-        return False
-    
-    # Check if email is configured
-    if not current_app.config.get('MAIL_USERNAME'):
-        logger.warning("Email is not configured. Skipping notification.")
-        return False
-    
-    # Convert single email to list
-    if isinstance(recipient_emails, str):
-        recipient_emails = [recipient_emails]
-    
-    # Filter out empty emails
-    recipient_emails = [email for email in recipient_emails if email]
-    
-    if not recipient_emails:
-        logger.debug(f"No recipient emails configured for job '{job_name}'")
-        return False
-    
+def _smtp_host() -> str:
+    return (os.getenv("SMTP_HOST") or os.getenv("MAIL_SERVER") or "").strip()
+
+
+def _smtp_port() -> int:
+    raw = (os.getenv("SMTP_PORT") or os.getenv("MAIL_PORT") or "").strip()
     try:
-        subject = f"✅ Job Success: {job_name}"
-        
-        html_body = f"""
-        <html>
-            <body style="font-family: Arial, sans-serif; color: #333;">
-                <div style="max-width: 600px; margin: 0 auto;">
-                    <h2 style="color: #2e7d32;">Job Completed Successfully</h2>
-                    <p>The following scheduled job has completed successfully:</p>
-                    
-                    <div style="background-color: #f5f5f5; padding: 15px; border-left: 4px solid #2e7d32; margin: 20px 0;">
-                        <p><strong>Job Name:</strong> {job_name}</p>
-                        <p><strong>Job ID:</strong> {job_id}</p>
-                        <p><strong>Duration:</strong> {duration_seconds:.2f} seconds</p>
-                    </div>
-                    
-                    <p style="color: #666; font-size: 14px;">
-                        No action is required. This is an informational notification.
-                    </p>
-                    
-                    <hr style="border: none; border-top: 1px solid #ddd; margin: 20px 0;">
-                    <p style="color: #999; font-size: 12px;">
-                        This is an automated notification from Cron Job Scheduler. Please do not reply to this email.
-                    </p>
-                </div>
-            </body>
-        </html>
-        """
-        
-        text_body = f"""
-        Job Completed Successfully
-        ==========================
-        
-        Job Name: {job_name}
-        Job ID: {job_id}
-        Duration: {duration_seconds:.2f} seconds
-        
-        No action is required. This is an informational notification.
-        
-        This is an automated notification from Cron Job Scheduler.
-        """
-        
-        msg = Message(
-            subject=subject,
-            recipients=recipient_emails,
-            html=html_body,
-            body=text_body
-        )
-        
-        mail.send(msg)
-        logger.info(f"Success notification sent for job '{job_name}' to {', '.join(recipient_emails)}")
-        return True
-    
-    except Exception as e:
-        logger.error(f"Failed to send success notification for job '{job_name}': {str(e)}")
+        return int(raw)
+    except Exception:
+        return 587
+
+
+def _smtp_username() -> str:
+    return (os.getenv("SMTP_USERNAME") or os.getenv("MAIL_USERNAME") or "").strip()
+
+
+def _smtp_password() -> str:
+    return (os.getenv("SMTP_PASSWORD") or os.getenv("MAIL_PASSWORD") or "").strip()
+
+
+def _smtp_use_tls() -> bool:
+    # STARTTLS by default.
+    return _env_bool("SMTP_USE_TLS", _env_bool("MAIL_USE_TLS", True))
+
+
+def _mail_enabled() -> bool:
+    return _env_bool("MAIL_ENABLED", True)
+
+
+def _from_address() -> str:
+    return (os.getenv("MAIL_FROM") or os.getenv("MAIL_DEFAULT_SENDER") or _smtp_username() or "").strip()
+
+
+def _normalize_recipients(recipient_emails: Sequence[str] | str | None) -> list[str]:
+    if not recipient_emails:
+        return []
+    if isinstance(recipient_emails, str):
+        emails: Iterable[str] = [recipient_emails]
+    else:
+        emails = recipient_emails
+    cleaned = [e.strip() for e in emails if e and e.strip()]
+    return sorted(set(cleaned))
+
+
+def _send_email(*, subject: str, text_body: str, html_body: Optional[str], recipients: list[str]) -> bool:
+    if not _mail_enabled():
         return False
+
+    host = _smtp_host()
+    username = _smtp_username()
+    password = _smtp_password()
+    sender = _from_address()
+
+    if not host:
+        logger.debug("SMTP host not configured; skipping email.")
+        return False
+    if not sender:
+        logger.debug("MAIL_FROM/MAIL_DEFAULT_SENDER not configured; skipping email.")
+        return False
+    if not recipients:
+        return False
+
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = sender
+    msg["To"] = ", ".join(recipients)
+    msg.set_content(text_body)
+    if html_body:
+        msg.add_alternative(html_body, subtype="html")
+
+    try:
+        port = _smtp_port()
+        use_tls = _smtp_use_tls()
+        context = ssl.create_default_context()
+
+        with smtplib.SMTP(host, port, timeout=15) as server:
+            server.ehlo()
+            if use_tls:
+                server.starttls(context=context)
+                server.ehlo()
+            if username:
+                server.login(username, password)
+            server.send_message(msg)
+        return True
+    except Exception as exc:
+        logger.warning("Email send failed: %s", exc)
+        return False
+
+
+def send_job_failure_notification(job_name: str, job_id: str, error_message: str, recipient_emails: Sequence[str] | str) -> bool:
+    recipients = _normalize_recipients(recipient_emails)
+    if not recipients:
+        return False
+
+    subject = f"Job Failure: {job_name}"
+    text_body = (
+        "Job Execution Failed\n"
+        "====================\n\n"
+        f"Job Name: {job_name}\n"
+        f"Job ID: {job_id}\n"
+        f"Error: {error_message}\n"
+    )
+    html_body = (
+        "<html><body style=\"font-family: Arial, sans-serif; color: #333;\">"
+        "<h2 style=\"color: #d32f2f;\">Job Execution Failed</h2>"
+        "<ul>"
+        f"<li><strong>Job Name:</strong> {job_name}</li>"
+        f"<li><strong>Job ID:</strong> {job_id}</li>"
+        f"<li><strong>Error:</strong> <code>{error_message}</code></li>"
+        "</ul>"
+        "</body></html>"
+    )
+    return _send_email(subject=subject, text_body=text_body, html_body=html_body, recipients=recipients)
+
+
+def send_job_success_notification(
+    job_name: str, job_id: str, duration_seconds: float, recipient_emails: Sequence[str] | str
+) -> bool:
+    recipients = _normalize_recipients(recipient_emails)
+    if not recipients:
+        return False
+
+    subject = f"Job Success: {job_name}"
+    text_body = (
+        "Job Completed Successfully\n"
+        "==========================\n\n"
+        f"Job Name: {job_name}\n"
+        f"Job ID: {job_id}\n"
+        f"Duration: {duration_seconds:.2f}s\n"
+    )
+    html_body = (
+        "<html><body style=\"font-family: Arial, sans-serif; color: #333;\">"
+        "<h2 style=\"color: #2e7d32;\">Job Completed Successfully</h2>"
+        "<ul>"
+        f"<li><strong>Job Name:</strong> {job_name}</li>"
+        f"<li><strong>Job ID:</strong> {job_id}</li>"
+        f"<li><strong>Duration:</strong> {duration_seconds:.2f}s</li>"
+        "</ul>"
+        "</body></html>"
+    )
+    return _send_email(subject=subject, text_body=text_body, html_body=html_body, recipients=recipients)

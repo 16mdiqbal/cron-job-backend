@@ -1,6 +1,6 @@
 # Cron Job Scheduler Backend
 
-A production-ready Flask-based REST API for scheduling and managing cron jobs with APScheduler, featuring GitHub Actions integration, CORS support, and comprehensive validation.
+A production-ready FastAPI-based REST API for scheduling and managing cron jobs with APScheduler, featuring GitHub Actions integration, CORS support, and comprehensive validation.
 
 ## Features
 
@@ -22,87 +22,55 @@ A production-ready Flask-based REST API for scheduling and managing cron jobs wi
 - ✅ **Execution Statistics** - Analyze job performance with success rates and metrics
 - ✅ **Date Range Filtering** - Filter executions, statistics, and notifications using `from`/`to` query params
 - ✅ **Persistent Storage** - SQLite database (production-ready for MySQL migration)
-- ✅ **Background Scheduler** - APScheduler with SQLAlchemy job store
+- ✅ **Background Scheduler** - APScheduler (leader-only via lock) with DB → scheduler reconciliation
 - ✅ **CORS Enabled** - Ready for frontend integration with proper auth headers
 - ✅ **Unique Job Names** - Prevents duplicate job names
 - ✅ **Active/Inactive Toggle** - Enable or disable jobs without deletion
 - ✅ **Per-User UI Preferences** - Persist UI settings (e.g., Jobs table columns) across devices
-- ✅ **Blueprint Architecture** - Clean, maintainable code structure
 
 ## Project Structure
 
 ```
 cron-job-backend/
-├── src/                    # Source code directory
-│   ├── __init__.py        # Package marker
-│   ├── __main__.py        # Module entry point (python -m src)
-│   ├── app.py             # Main Flask application (Factory pattern)
-│   ├── config.py          # Configuration settings
-│   ├── scripts/           # One-off maintenance scripts
-│   │   ├── __init__.py
-│   │   └── backfill_github_owner.py
-│   ├── models/
-│   │   ├── __init__.py    # Database initialization
-│   │   ├── user.py        # User model with authentication
-│   │   ├── job.py         # Job model with ownership tracking
-│   │   ├── job_category.py # Job category model (admin-managed)
-│   │   ├── pic_team.py    # PIC team model (admin-managed)
-│   │   ├── slack_settings.py # Global Slack integration settings
-│   │   ├── job_execution.py # Job execution history model
-│   │   └── notification.py # Notification model (in-app inbox)
-│   │   └── ui_preferences.py # Per-user UI preferences
-│   ├── routes/
-│   │   ├── __init__.py    # Routes package
-│   │   ├── auth.py        # Authentication endpoints (Blueprint)
-│   │   ├── jobs.py        # Job/execution/category API endpoints (Blueprint)
-│   │   └── notifications.py # Notification inbox endpoints (Blueprint)
-│   ├── utils/
-│   │   ├── __init__.py    # Utilities package
-│   │   ├── auth.py        # Auth decorators and helpers
-│   │   ├── email.py       # Email notification utilities
-│   │   └── sqlite_schema.py # Lightweight SQLite schema guard (no Alembic)
-│   │   └── slack.py       # Slack incoming webhook helper
-│   ├── services/
-│   │   └── end_date_maintenance.py # Weekly end-date reminders + auto-pause
-│   └── scheduler/
-│       ├── __init__.py    # Scheduler initialization
-│       └── job_executor.py # Job execution functions
-│   └── instance/          # SQLite database directory (default)
-│       └── cron_jobs.db
-├── test/                   # Test suite directory
-│   ├── conftest.py        # Pytest fixtures and configuration
-│   ├── test_auth/         # Authentication tests
-│   │   └── test_login.py
-│   ├── test_jobs/         # Job management tests
-│   │   ├── test_create.py
-│   │   ├── test_retrieve.py
-│   │   ├── test_update.py
-│   │   └── test_delete_and_execute.py
-│   └── test_notifications/ # Notification feature tests
-│       └── test_email_toggle.py
-├── venv/                  # Python virtual environment
-├── create_admin.py        # Script to create initial admin user
-├── requirements.txt       # Python dependencies
-├── pytest.ini             # Pytest configuration
-├── .env                   # Environment variables (git-ignored)
-├── .env.example           # Example environment variables
-├── README.md              # This file
-├── FOLDER_STRUCTURE.md    # Detailed folder structure documentation
-├── TESTING_GUIDE.md       # Comprehensive testing guide
-├── REORGANIZATION_SUMMARY.md # Project reorganization details
-├── DATABASE_SCHEMA_MYSQL.sql # MySQL database schema
-├── MYSQL_SETUP_GUIDE.md   # MySQL setup and configuration
-├── MYSQL_CONFIG_REFERENCE.md # MySQL configuration examples
-├── MYSQL_DATABASE_SETUP.md   # MySQL database setup overview
-├── architecture.md        # Architecture documentation
-└── test_api.sh            # API testing script
+├── src/                         # Backend source package
+│   ├── __init__.py
+│   ├── __main__.py              # Entry point: `python -m src`
+│   ├── app/                     # FastAPI app + routers (/api/v2/*)
+│   ├── database/                # SQLAlchemy engines + session factories
+│   ├── models/                  # SQLAlchemy models (schema source of truth)
+│   ├── scheduler/               # APScheduler + lock + execution logic
+│   ├── services/                # Background services (end-date maintenance)
+│   ├── utils/                   # Shared utilities (SMTP, Slack, SQLite guard)
+│   └── instance/                # Runtime artifacts (gitignored: `*.db`, `scheduler.lock`)
+├── test/                        # Pytest suite (FastAPI)
+├── scripts/                     # Operational scripts
+│   ├── create_admin.py
+│   ├── init_fastapi_db.py
+│   └── initialize_db.sh
+├── docs/
+│   ├── database/
+│   │   ├── DATABASE_SCHEMA_MYSQL.sql
+│   │   └── DATABASE_SEPARATION.md
+│   ├── EDUCATION.md
+│   ├── MINDMAP.md
+│   └── migration/
+│       └── FASTAPI_MIGRATION_PLAN.md
+├── extras/
+│   └── Postman_Collection.json
+├── logs/                        # Local logs (gitignored)
+├── Job Master Schedular - GithubActions - API.csv
+├── start_fastapi.sh
+├── requirements.txt
+├── pytest.ini
+├── .env.example
+├── README.md
+└── architecture.md
 ```
 
 **Directory Organization:**
 - **src/** - All application source code
-- **test/** - Complete pytest test suite (94 tests)
-- **instance/** - Runtime data and databases
-- **venv/** - Python virtual environment
+- **test/** - FastAPI pytest suite
+- **src/instance/** - Runtime DB + lock files (gitignored)
 
 ## Setup Instructions
 
@@ -110,7 +78,7 @@ cron-job-backend/
 
 ```bash
 # Create virtual environment
-python3.11 -m venv venv
+python3.12 -m venv venv
 
 # Activate virtual environment
 # On macOS/Linux:
@@ -120,14 +88,14 @@ source venv/bin/activate
 ```
 
 ### 2. Install Dependencies
-
+ 
 ```bash
 pip install -r requirements.txt
 ```
 
 **Environment Variables:**
-- `FLASK_DEBUG` - Debug mode (default: False)
-- `SECRET_KEY` - Flask secret key for session management
+- `DEBUG` - Debug mode (default: False)
+- `SECRET_KEY` - App secret key (used for JWT signing when `JWT_SECRET_KEY` is unset)
 - `JWT_SECRET_KEY` - JWT token signing key (defaults to SECRET_KEY)
 - `JWT_ACCESS_TOKEN_EXPIRES` - Access token expiration in seconds (default: 3600 = 1 hour)
 - `JWT_REFRESH_TOKEN_EXPIRES` - Refresh token expiration in seconds (default: 2592000 = 30 days)
@@ -158,22 +126,17 @@ pip install -r requirements.txt
 ## Key APIs
 
 - **PIC Teams**
-  - `GET /api/pic-teams`
-  - `POST /api/pic-teams` (admin)
-  - `PUT /api/pic-teams/<id>` (admin)
-  - `DELETE /api/pic-teams/<id>` (admin, disables)
+  - `GET /api/v2/pic-teams`
+  - `POST /api/v2/pic-teams` (admin)
+  - `PUT /api/v2/pic-teams/<id>` (admin)
+  - `DELETE /api/v2/pic-teams/<id>` (admin, disables)
 - **Slack Settings (admin)**
-  - `GET /api/settings/slack`
-  - `PUT /api/settings/slack`
+  - `GET /api/v2/settings/slack`
+  - `PUT /api/v2/settings/slack`
 - **UI Preferences (per user)**
-  - `GET /api/auth/users/<user_id>/ui-preferences`
-  - `PUT /api/auth/users/<user_id>/ui-preferences`
+  - `GET /api/v2/auth/users/<user_id>/ui-preferences`
+  - `PUT /api/v2/auth/users/<user_id>/ui-preferences`
 
-## Scripts
-
-- `./start_server.sh` starts the backend on `http://localhost:5001`.
-  - It **does not wipe the database by default**.
-  - To wipe legacy DB files, run: `WIPE_DB=true ./start_server.sh`
 ### 3. Configure Environment Variables
 
 ```bash
@@ -188,7 +151,7 @@ cp .env.example .env
 
 ```bash
 # Create the default admin account
-python create_admin.py
+python scripts/create_admin.py
 
 # Default credentials (CHANGE THESE IN PRODUCTION):
 # Username: admin
@@ -199,51 +162,53 @@ python create_admin.py
 ### 5. Run the Application
 
 ```bash
-# Run as Python module (recommended)
+# Run as Python module
 python -m src
 # Server will start on http://localhost:5001
-
-# Alternative: Run directly from src directory
-# python src/app.py
 ```
 
 ---
 
+## Scripts
+
+- `./start_fastapi.sh` starts uvicorn with `--reload` and logs to `logs/fastapi.log` by default.
+- `./scripts/init_fastapi_db.py` initializes DB schema (no scheduler).
+- `./scripts/create_admin.py` creates an admin user (idempotent).
+- `./scripts/initialize_db.sh` convenience wrapper: init DB + create admin.
+
 ## Testing
 
 ### Comprehensive Test Suite
-The project includes a full pytest test suite with 94 tests covering all functionality:
+The project includes a full pytest test suite covering the FastAPI services:
 
 ```bash
 # Run all tests
-pytest test/ -v
+pytest -q test
 
-# Run specific test module
-pytest test/test_auth/ -v
-pytest test/test_jobs/ -v
-pytest test/test_notifications/ -v
+# Run a specific area
+pytest -q test/auth
+pytest -q test/jobs
+pytest -q test/jobs_write
 
 # Run with coverage report
 pytest test/ --cov=src --cov-report=html
 
-# Run specific test file
-pytest test/test_auth/test_login.py -v
+# Run a specific file
+pytest -q test/auth/test_login.py
 
 # Run tests matching pattern
 pytest test/ -k "test_create" -v
 ```
 
 **Test Organization:**
-- `test/test_auth/` - Authentication and authorization (16 tests)
-- `test/test_jobs/` - Job CRUD operations (69 tests)
-- `test/test_notifications/` - Email notification features (21 tests)
+- `test/auth/` - Authentication and authorization
+- `test/jobs/` - Job read endpoints
+- `test/jobs_write/` - Job CRUD + bulk upload + execute
+- `test/executions/` - Execution history and stats
+- `test/notifications/` - Notifications read/write
+- `test/taxonomy/` + `test/taxonomy_write/` - Categories/PIC teams
+- `test/scheduler/` + `test/services/` - Scheduler + maintenance
 - `test/conftest.py` - Shared fixtures and configuration
-
-**Test Coverage:** 61% of source code
-
-**Test Duration:** ~3.3 seconds for full suite
-
-See [TESTING_GUIDE.md](TESTING_GUIDE.md) for detailed testing documentation.
 
 ---
 
@@ -263,9 +228,9 @@ To use MySQL in production:
    ```
 
 2. **Create Database:**
-   See [DATABASE_SCHEMA_MYSQL.sql](DATABASE_SCHEMA_MYSQL.sql) for complete schema.
+   See [`docs/database/DATABASE_SCHEMA_MYSQL.sql`](docs/database/DATABASE_SCHEMA_MYSQL.sql) for complete schema.
    ```bash
-   mysql -u root -p < DATABASE_SCHEMA_MYSQL.sql
+   mysql -u root -p < docs/database/DATABASE_SCHEMA_MYSQL.sql
    ```
 
 3. **Configure Connection:**
@@ -278,10 +243,9 @@ To use MySQL in production:
    DATABASE_URL=mysql+mysqlconnector://user:password@localhost:3306/cron_jobs_db
    ```
 
-4. **Additional MySQL Resources:**
-   - [MYSQL_SETUP_GUIDE.md](MYSQL_SETUP_GUIDE.md) - Complete setup instructions
-   - [MYSQL_CONFIG_REFERENCE.md](MYSQL_CONFIG_REFERENCE.md) - Configuration examples
-   - [MYSQL_DATABASE_SETUP.md](MYSQL_DATABASE_SETUP.md) - Database overview
+4. **Notes:**
+   - `docs/database/DATABASE_SCHEMA_MYSQL.sql` is generated from the SQLAlchemy models under `src/models/`.
+   - You must install a MySQL driver (e.g. `PyMySQL`) in your deployment environment.
 
 ---
 
@@ -289,7 +253,7 @@ To use MySQL in production:
 
 ### Overview
 
-The API uses **JWT (JSON Web Token)** based authentication with role-based access control (RBAC). All endpoints except `/api/health` require authentication.
+The API uses **JWT (JSON Web Token)** based authentication with role-based access control (RBAC). All endpoints except `/api/v2/health` require authentication.
 
 ### User Roles & Permissions
 
@@ -317,7 +281,7 @@ The API uses **JWT (JSON Web Token)** based authentication with role-based acces
 
 ### 1. Login
 
-**Endpoint:** `POST /api/auth/login`
+**Endpoint:** `POST /api/v2/auth/login`
 
 **Description:** Authenticate user and receive JWT tokens
 
@@ -353,7 +317,7 @@ The API uses **JWT (JSON Web Token)** based authentication with role-based acces
 
 **Example:**
 ```bash
-curl -X POST http://localhost:5001/api/auth/login \
+curl -X POST http://localhost:5001/api/v2/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "admin", "password": "admin123"}'
 ```
@@ -362,7 +326,7 @@ curl -X POST http://localhost:5001/api/auth/login \
 
 ### 2. Register User (Admin Only)
 
-**Endpoint:** `POST /api/auth/register`
+**Endpoint:** `POST /api/v2/auth/register`
 
 **Description:** Register a new user (requires admin authentication)
 
@@ -412,7 +376,7 @@ Content-Type: application/json
 
 **Example:**
 ```bash
-curl -X POST http://localhost:5001/api/auth/register \
+curl -X POST http://localhost:5001/api/v2/auth/register \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <admin_token>" \
   -d '{
@@ -427,7 +391,7 @@ curl -X POST http://localhost:5001/api/auth/register \
 
 ### 3. Refresh Token
 
-**Endpoint:** `POST /api/auth/refresh`
+**Endpoint:** `POST /api/v2/auth/refresh`
 
 **Description:** Get a new access token using refresh token
 
@@ -448,7 +412,7 @@ Authorization: Bearer <refresh_token>
 
 **Example:**
 ```bash
-curl -X POST http://localhost:5001/api/auth/refresh \
+curl -X POST http://localhost:5001/api/v2/auth/refresh \
   -H "Authorization: Bearer <refresh_token>"
 ```
 
@@ -456,7 +420,7 @@ curl -X POST http://localhost:5001/api/auth/refresh \
 
 ### 4. Get Current User
 
-**Endpoint:** `GET /api/auth/me`
+**Endpoint:** `GET /api/v2/auth/me`
 
 **Description:** Get current authenticated user information
 
@@ -482,7 +446,7 @@ Authorization: Bearer <access_token>
 
 **Example:**
 ```bash
-curl http://localhost:5001/api/auth/me \
+curl http://localhost:5001/api/v2/auth/me \
   -H "Authorization: Bearer <access_token>"
 ```
 
@@ -490,7 +454,7 @@ curl http://localhost:5001/api/auth/me \
 
 ### 5. List All Users (Admin Only)
 
-**Endpoint:** `GET /api/auth/users`
+**Endpoint:** `GET /api/v2/auth/users`
 
 **Description:** Get list of all users (admin only)
 
@@ -524,7 +488,7 @@ Authorization: Bearer <admin_access_token>
 
 **Example:**
 ```bash
-curl http://localhost:5001/api/auth/users \
+curl http://localhost:5001/api/v2/auth/users \
   -H "Authorization: Bearer <admin_token>"
 ```
 
@@ -532,7 +496,7 @@ curl http://localhost:5001/api/auth/users \
 
 ### 6. Get User by ID
 
-**Endpoint:** `GET /api/auth/users/<user_id>`
+**Endpoint:** `GET /api/v2/auth/users/<user_id>`
 
 **Description:** Get specific user details by ID
 
@@ -567,7 +531,7 @@ Authorization: Bearer <access_token>
 
 **Example:**
 ```bash
-curl http://localhost:5001/api/auth/users/<user_id> \
+curl http://localhost:5001/api/v2/auth/users/<user_id> \
   -H "Authorization: Bearer <access_token>"
 ```
 
@@ -575,7 +539,7 @@ curl http://localhost:5001/api/auth/users/<user_id> \
 
 ### 7. Update User
 
-**Endpoint:** `PUT /api/auth/users/<user_id>`
+**Endpoint:** `PUT /api/v2/auth/users/<user_id>`
 
 **Description:** Update user information
 
@@ -633,13 +597,13 @@ Content-Type: application/json
 **Example:**
 ```bash
 # User updating own email
-curl -X PUT http://localhost:5001/api/auth/users/<user_id> \
+curl -X PUT http://localhost:5001/api/v2/auth/users/<user_id> \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <access_token>" \
   -d '{"email": "newemail@example.com"}'
 
 # Admin updating user role
-curl -X PUT http://localhost:5001/api/auth/users/<user_id> \
+curl -X PUT http://localhost:5001/api/v2/auth/users/<user_id> \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer <admin_token>" \
   -d '{"role": "admin", "is_active": true}'
@@ -649,7 +613,7 @@ curl -X PUT http://localhost:5001/api/auth/users/<user_id> \
 
 ### 8. Delete User
 
-**Endpoint:** `DELETE /api/auth/users/<user_id>`
+**Endpoint:** `DELETE /api/v2/auth/users/<user_id>`
 
 **Description:** Delete a user (Admin only)
 
@@ -682,7 +646,7 @@ Authorization: Bearer <admin_access_token>
 
 **Example:**
 ```bash
-curl -X DELETE http://localhost:5001/api/auth/users/<user_id> \
+curl -X DELETE http://localhost:5001/api/v2/auth/users/<user_id> \
   -H "Authorization: Bearer <admin_token>"
 ```
 
@@ -692,7 +656,7 @@ curl -X DELETE http://localhost:5001/api/auth/users/<user_id> \
 
 ### 1. Health Check
 
-**Endpoint:** `GET /api/health`
+**Endpoint:** `GET /api/v2/health`
 
 **Description:** Check API and scheduler status (No authentication required)
 
@@ -707,7 +671,7 @@ curl -X DELETE http://localhost:5001/api/auth/users/<user_id> \
 
 **Example:**
 ```bash
-curl http://localhost:5001/api/health
+curl http://localhost:5001/api/v2/health
 ```
 
 ---
@@ -785,7 +749,7 @@ Content-Type: application/json
 
 ```bash
 # Step 1: Login and save token
-TOKEN=$(curl -s -X POST http://localhost:5001/api/auth/login \
+TOKEN=$(curl -s -X POST http://localhost:5001/api/v2/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "admin", "password": "admin123"}' \
   | python3 -c "import sys, json; print(json.load(sys.stdin)['access_token'])")
@@ -811,7 +775,7 @@ curl -X PUT http://localhost:5001/api/jobs/<job_id> \
   -d '{"is_active": false}'
 
 # Step 5: When token expires, refresh it
-NEW_TOKEN=$(curl -s -X POST http://localhost:5001/api/auth/refresh \
+NEW_TOKEN=$(curl -s -X POST http://localhost:5001/api/v2/auth/refresh \
   -H "Authorization: Bearer $REFRESH_TOKEN" \
   | python3 -c "import sys, json; print(json.load(sys.stdin)['access_token'])")
 ```
@@ -821,7 +785,7 @@ NEW_TOKEN=$(curl -s -X POST http://localhost:5001/api/auth/refresh \
 ```javascript
 // Login and store tokens
 async function login(username, password) {
-  const response = await fetch('http://localhost:5001/api/auth/login', {
+  const response = await fetch('http://localhost:5001/api/v2/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, password })
@@ -859,7 +823,7 @@ async function createJob(jobData) {
 async function refreshToken() {
   const refreshToken = localStorage.getItem('refresh_token');
   
-  const response = await fetch('http://localhost:5001/api/auth/refresh', {
+  const response = await fetch('http://localhost:5001/api/v2/auth/refresh', {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${refreshToken}` }
   });
@@ -884,7 +848,7 @@ The API supports Cross-Origin Resource Sharing (CORS) for frontend integration.
 
 **Example CORS Test:**
 ```bash
-curl -i -X OPTIONS http://localhost:5001/api/jobs \
+curl -i -X OPTIONS http://localhost:5001/api/v2/jobs \
   -H "Origin: http://localhost:3000" \
   -H "Access-Control-Request-Method: POST" \
   -H "Access-Control-Request-Headers: Authorization, Content-Type"
@@ -895,19 +859,19 @@ curl -i -X OPTIONS http://localhost:5001/api/jobs \
 ## Architecture & Design
 
 ### Technology Stack
-- **Framework:** Flask 3.0.0
-- **Authentication:** Flask-JWT-Extended 4.6.0 for JWT token management
+- **Framework:** FastAPI
+- **Authentication:** JWT (PyJWT) with access/refresh tokens
 - **Password Hashing:** passlib 1.7.4 with PBKDF2-SHA256
-- **Scheduler:** APScheduler 3.10.4 with SQLAlchemy job store
-- **Database:** SQLAlchemy with SQLite (MySQL-ready)
+- **Scheduler:** APScheduler 3.10.4 (leader-only via lock + DB reconciliation)
+- **Database:** SQLAlchemy + SQLite (MySQL-ready)
 - **Validation:** croniter 2.0.1 for cron expression validation
 - **HTTP Client:** requests 2.31.0 for GitHub API and webhooks
-- **CORS:** Flask-CORS 4.0.0
+- **CORS:** Starlette `CORSMiddleware`
 
 ### Key Features
 
 **1. Application Factory Pattern**
-- Clean initialization in `create_app()` function
+- Initialization via `src/app/main.py:create_app()`
 - Easy testing and configuration management
 
 **2. JWT Authentication & Authorization**
@@ -916,16 +880,14 @@ curl -i -X OPTIONS http://localhost:5001/api/jobs \
 - Secure password hashing with PBKDF2-SHA256
 - Job ownership tracking and enforcement
 
-**3. Blueprint Architecture**
-- Routes separated into `routes/auth.py` and `routes/jobs.py` Blueprints
-- Auth decorators for role-based protection
-- Reduced cognitive complexity
+**3. Router-Based Architecture**
+- Routers organized under `src/app/routers/`
+- Dependency-injected auth + role checks
 - Better code organization
 
 **4. Scheduler Integration**
-- Background scheduler starts with Flask app
-- SQLAlchemy job store for persistence
-- Automatic job loading from database on startup
+- Background scheduler starts under FastAPI lifespan (leader-only)
+- DB → scheduler reconciliation keeps APScheduler aligned with stored jobs
 - CronTrigger for reliable scheduling
 
 **5. Database Design**
@@ -1061,7 +1023,7 @@ rm src/instance/cron_jobs.db-journal
 - Verify `is_active` is `true`
 - Check cron expression is valid
 - Verify GitHub token (if using GitHub Actions)
-- Check scheduler is running: `GET /api/health`
+- Check scheduler is running: `GET /api/v2/health`
 
 ### CORS Errors
 - Verify `CORS_ORIGINS` includes your frontend domain
@@ -1771,19 +1733,19 @@ Role: admin
 ### Authentication Endpoints
 | Method | Endpoint | Auth Required | Role Required | Description |
 |--------|----------|---------------|---------------|-------------|
-| POST | `/api/auth/login` | No | - | Login and get tokens |
-| POST | `/api/auth/register` | Yes | Admin | Register new user |
-| POST | `/api/auth/refresh` | Yes (refresh token) | - | Refresh access token |
-| GET | `/api/auth/me` | Yes | - | Get current user info |
-| GET | `/api/auth/users` | Yes | Admin | List all users |
-| GET | `/api/auth/users/<user_id>` | Yes | Admin or Self | Get user by ID |
-| PUT | `/api/auth/users/<user_id>` | Yes | Admin or Self | Update user |
-| DELETE | `/api/auth/users/<user_id>` | Yes | Admin | Delete user |
+| POST | `/api/v2/auth/login` | No | - | Login and get tokens |
+| POST | `/api/v2/auth/register` | Yes | Admin | Register new user |
+| POST | `/api/v2/auth/refresh` | Yes (refresh token) | - | Refresh access token |
+| GET | `/api/v2/auth/me` | Yes | - | Get current user info |
+| GET | `/api/v2/auth/users` | Yes | Admin | List all users |
+| GET | `/api/v2/auth/users/<user_id>` | Yes | Admin or Self | Get user by ID |
+| PUT | `/api/v2/auth/users/<user_id>` | Yes | Admin or Self | Update user |
+| DELETE | `/api/v2/auth/users/<user_id>` | Yes | Admin | Delete user |
 
 ### Job Management Endpoints
 | Method | Endpoint | Auth Required | Role Required | Description |
 |--------|----------|---------------|---------------|-------------|
-| GET | `/api/health` | No | - | Health check |
+| GET | `/api/v2/health` | No | - | Health check |
 | POST | `/api/jobs` | Yes | Admin, User | Create job |
 | GET | `/api/jobs` | Yes | All | List all jobs |
 | GET | `/api/jobs/<id>` | Yes | All | Get job details |
